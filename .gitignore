@@ -1,0 +1,26 @@
+# 生HTML(NPB/baseballdata等のページ原文)はリポに入れない — 派生データ(data/events, data/logs)のみ
+data/raw/
+data/out/
+data/raw_hold/
+
+# 秘密情報(Discord Webhook等)
+.secrets/
+
+# 内部メモ・デザイン試作(公開対象外)
+docs/
+
+# 開発時の使い捨てスクリプト(公開対象外)
+src/card_mock.py
+src/gen_chart.py
+src/repair.py
+src/swap_chart.py
+src/polish.py
+src/tweak_v*.py
+src/probe_cols.py
+src/dbg_pitcher.py
+src/inventory.py
+src/chart_new.svg
+src/build_card.py
+
+__pycache__/
+*.pyc

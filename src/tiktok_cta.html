@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<!-- TikTok最終スライド=X誘導CTA(9/4作り込み版)
+     カード群と同じ1080×1250(カルーセルで縦横比を揃えるため・9/4社長裁定の並びに合わせる)
+     レンダ: msedge --headless=new --screenshot=data/out/tiktok_cta.png --window-size=1080,1250
+             --force-device-scale-factor=3 --hide-scrollbars file:///.../src/tiktok_cta.html
+     サムネは9/3実カード(../data/out/0903/card_d-c-22.png)を参照 -->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",Meiryo,sans-serif; }
+  body { width:1080px; background:#eef1f7; color:#16213c; }
+  .card { position:relative; width:1080px; height:1250px; padding:64px 70px 44px; overflow:hidden;
+          display:flex; flex-direction:column;
+          background:
+            radial-gradient(ellipse 900px 520px at 50% -8%, rgba(56,116,255,.12), transparent 60%),
+            radial-gradient(ellipse 700px 420px at 0% 100%, rgba(46,100,230,.06), transparent 60%),
+            radial-gradient(ellipse 700px 420px at 100% 100%, rgba(200,160,20,.07), transparent 60%),
+            #eef1f7; }
+  .hdr { display:flex; align-items:center; justify-content:space-between; }
+  .ic { width:88px; height:88px; border-radius:22px; background:linear-gradient(135deg,#2f6fe0,#1673c9);
+        display:flex; align-items:center; justify-content:center; font-size:46px; font-weight:900; color:#fff;
+        box-shadow:0 8px 26px rgba(22,80,180,.25); }
+  .pill { background:rgba(255,255,255,.94); border:1.5px solid #dde4f0; border-radius:999px;
+          padding:14px 30px; font-size:24px; font-weight:900; color:#5d6a86;
+          box-shadow:0 4px 14px rgba(22,33,60,.06); }
+  h1 { font-size:54px; font-weight:900; line-height:1.42; margin-top:40px; letter-spacing:.01em; }
+  h1 b { color:#1673c9; }
+  .main { display:flex; gap:44px; margin-top:40px; align-items:flex-start; }
+  .lft { flex:1; min-width:0; }
+  .sub { font-size:27px; font-weight:700; color:#5d6a86; line-height:1.7; }
+  .chk { display:flex; align-items:flex-start; gap:16px; background:rgba(255,255,255,.94);
+         border:1.5px solid #dde4f0; border-radius:16px; padding:20px 24px; margin-top:18px;
+         box-shadow:0 4px 14px rgba(22,33,60,.05); }
+  .chk:first-of-type { margin-top:28px; }
+  .chk .m { width:34px; height:34px; border-radius:50%; flex:none; margin-top:2px;
+            background:linear-gradient(135deg,#12b269,#0a7f45); color:#fff; font-size:20px;
+            font-weight:900; display:flex; align-items:center; justify-content:center; }
+  .chk .t { font-size:24.5px; font-weight:900; line-height:1.5; }
+  .chk .t small { display:block; font-size:19px; font-weight:700; color:#5d6a86; margin-top:3px; }
+  .thumbw { flex:none; width:400px; position:relative; padding-top:10px; }
+  .thumb { width:400px; border-radius:14px; transform:rotate(2.4deg);
+           border:1.5px solid #dde4f0; box-shadow:0 24px 60px rgba(16,23,40,.28); display:block; }
+  .badge { position:absolute; left:-16px; bottom:-14px; transform:rotate(-2deg);
+           background:linear-gradient(135deg,#e04a42,#b8302a); color:#fff; font-size:22px;
+           font-weight:900; padding:12px 24px; border-radius:999px; letter-spacing:.06em;
+           box-shadow:0 8px 22px rgba(221,61,53,.35); }
+  .cta { margin-top:auto; width:100%; text-align:center;
+         background:linear-gradient(135deg,#101728,#1c2740); border-radius:24px; padding:38px 40px 34px;
+         box-shadow:0 14px 40px rgba(16,23,40,.35); }
+  .cta .t1 { font-size:27px; font-weight:900; color:#aab8da; letter-spacing:.1em; }
+  .cta .t2 { font-size:58px; font-weight:900; color:#fff; margin-top:14px; letter-spacing:.02em; }
+  .cta .t2 .x { display:inline-flex; align-items:center; justify-content:center; width:66px; height:66px;
+                border-radius:16px; background:#fff; color:#000; font-size:42px; margin-right:18px; vertical-align:middle; }
+  .cta .t3 { font-size:24px; font-weight:900; color:#4fd8ff; margin-top:14px; letter-spacing:.06em; }
+  .ft { font-size:18px; color:#8a95ad; font-weight:700; margin-top:20px; text-align:center; }
+</style></head><body>
+<div class="card">
+  <div class="hdr">
+    <div class="ic">采</div>
+    <div class="pill">毎晩更新 ・ 試験運用中(β)</div>
+  </div>
+  <h1>毎晩、NPB全試合の<br><b>「監督の采配」</b>を数字で採点</h1>
+  <div class="main">
+    <div class="lft">
+      <div class="sub">バント・継投・代打・敬遠——<br>その指示、得だったのか?</div>
+      <div class="chk"><div class="m">✓</div><div class="t">結果論は使いません<small>ヒットでも分の悪い賭けならマイナス評価</small></div></div>
+      <div class="chk"><div class="m">✓</div><div class="t">好手も悪手も毎晩ランキング<small>影響の大きい順に±X.XX点で表示</small></div></div>
+      <div class="chk"><div class="m">✓</div><div class="t">計算方法は全公開<small>NPB公式記録より自動集計</small></div></div>
+    </div>
+    <div class="thumbw">
+      <img class="thumb" src="../data/out/0903/card_d-c-22.png">
+      <div class="badge">毎晩こんなカードを全試合分</div>
+    </div>
+  </div>
+  <div class="cta">
+    <div class="t1">全試合の採点カードは毎晩こちら</div>
+    <div class="t2"><span class="x">𝕏</span>@saihaiscore_lab</div>
+    <div class="t3">プロフィールのリンクからどうぞ</div>
+  </div>
+  <div class="ft">データ: NPB公式記録より自動集計</div>
+</div>
+</body></html>

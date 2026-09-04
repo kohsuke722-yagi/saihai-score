@@ -1,0 +1,47 @@
+# 深夜のDB更新便(04:00 JST): 前日rawを取得→イベントキャッシュ化→全DB再構築→commit
+# rawのHTMLはリポに入れない(派生データのみ)。カード生成には影響しない独立便
+name: nightly-db
+on:
+  schedule:
+    - cron: '0 19 * * *'   # 04:00 JST
+  workflow_dispatch:
+    inputs:
+      mmdd:
+        description: 'MMDD(省略=昨日JST)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: 対象日の決定
+        run: |
+          MMDD="${{ inputs.mmdd }}"
+          if [ -z "$MMDD" ]; then MMDD=$(TZ=Asia/Tokyo date -d yesterday +%m%d); fi
+          echo "MMDD=$MMDD" >> $GITHUB_ENV
+          echo "対象日: $MMDD"
+      - name: 前日raw取得(playbyplay/index/box)
+        run: python3 src/fetch.py pbp $MMDD
+      - name: 参照データ(ロスター+baseballdata犠打)
+        run: python3 src/fetch_refs.py
+      - name: DB再構築(palog→retab→pitcher_ctx→runpower→ph_calib→bunt_calib)
+        run: |
+          python3 src/palog.py
+          python3 src/retab.py
+          python3 src/pitcher_ctx.py
+          python3 src/runpower.py
+          python3 src/ph_calib.py
+          python3 src/bunt_calib.py
+      - name: commit(events+logs+players)
+        run: |
+          git config user.name "saihai-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/events data/logs data/players
+          git commit -m "nightly-db: $MMDD" || echo "no changes"
+          git pull --rebase
+          git push

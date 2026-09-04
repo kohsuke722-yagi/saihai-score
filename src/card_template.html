@@ -1,0 +1,409 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"Yu Gothic UI","Meiryo",sans-serif; }
+  :root { --txt:#f2f6ff; --mut:#7e8db0; --mut2:#aab8da;
+          --blue:#4e8df5; --gold:#f5c518; --green:#31e981; --red:#ff5d54; --cyan:#4fd8ff; }
+  body { width:1080px; background:#060a18; color:var(--txt); }
+  .card { position:relative; width:1080px; padding:0 0 22px; overflow:hidden;
+          background:
+            radial-gradient(ellipse 860px 500px at 50% -10%, rgba(56,116,255,.32), transparent 60%),
+            radial-gradient(ellipse 600px 400px at 6% 10%, rgba(46,100,230,.18), transparent 60%),
+            radial-gradient(ellipse 600px 400px at 94% 10%, rgba(245,197,24,.14), transparent 60%),
+            radial-gradient(ellipse 700px 380px at 0% 100%, rgba(46,100,230,.14), transparent 60%),
+            radial-gradient(ellipse 700px 380px at 100% 100%, rgba(200,160,20,.10), transparent 60%),
+            linear-gradient(180deg,#0c1734 0%, #081024 48%, #070c1c 100%); }
+  .card::before { content:""; position:absolute; inset:0; z-index:1; opacity:.45;
+     background-image:radial-gradient(rgba(120,160,255,.08) 1px, transparent 1.5px); background-size:24px 24px; }
+  .card::after { content:""; position:absolute; top:0; left:0; right:0; height:5px; z-index:3;
+     background:linear-gradient(90deg,#2f6fe0,#4fd8ff 35%,#f5c518 70%,#e0a90f);
+     box-shadow:0 0 22px rgba(79,216,255,.55); }
+  .streak { position:absolute; top:-120px; left:16%; width:300px; height:1000px; z-index:1;
+            background:linear-gradient(90deg, transparent, rgba(150,195,255,.10), transparent);
+            transform:rotate(16deg); }
+  .streak2 { position:absolute; top:-120px; right:10%; width:220px; height:1000px; z-index:1;
+             background:linear-gradient(90deg, transparent, rgba(245,197,24,.06), transparent);
+             transform:rotate(-14deg); }
+  .frame { position:absolute; inset:10px; border:1px solid rgba(120,170,255,.18); border-radius:18px; z-index:1;
+           box-shadow:inset 0 0 40px rgba(60,120,255,.08); }
+  .beam { position:absolute; top:-30px; width:430px; height:780px; z-index:1;
+          background:linear-gradient(180deg, rgba(190,220,255,.13), transparent 72%);
+          clip-path:polygon(46% 0, 54% 0, 100% 100%, 0% 100%); }
+  .beam.bl { left:-70px; transform:rotate(18deg); }
+  .beam.br { right:-70px; transform:rotate(-18deg);
+             background:linear-gradient(180deg, rgba(255,225,140,.10), transparent 72%); }
+  .z { position:relative; z-index:2; padding:24px 34px 0; }
+
+  /* ── ヘッダー(参照: タイトル左・日付右) ── */
+  .topbar { display:flex; justify-content:space-between; align-items:center; }
+  .ttl { display:flex; align-items:center; gap:12px; }
+  .ttl .ic { width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg,#2f6fe0,#4fd8ff);
+             display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:900; color:#fff;
+             box-shadow:0 0 20px rgba(79,216,255,.65); }
+  .ttl h1 { font-size:29px; font-weight:900; letter-spacing:.04em; text-shadow:0 2px 24px rgba(70,140,255,.5);
+            position:relative; padding-bottom:6px; }
+  .ttl h1::after { content:""; position:absolute; left:0; bottom:0; width:100%; height:3px; border-radius:2px;
+                   background:linear-gradient(90deg,#4fd8ff,rgba(79,216,255,0));
+                   box-shadow:0 0 12px rgba(79,216,255,.6); }
+  .ttl h1 .em { color:var(--cyan); }
+  .botbar { position:absolute; bottom:0; left:0; right:0; height:4px; z-index:3; opacity:.85;
+            background:linear-gradient(90deg,#e0a90f,#f5c518 30%,#4fd8ff 70%,#2f6fe0);
+            box-shadow:0 0 18px rgba(150,180,255,.4); }
+  .date { text-align:right; font-size:14px; color:var(--mut2); line-height:1.6; }
+
+  /* ── スコア帯 ── */
+  .scorebar { display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding:14px 34px;
+              border-radius:16px;
+              background:linear-gradient(90deg, rgba(42,79,158,.55) 0%, rgba(12,20,44,.94) 32%, rgba(12,20,44,.94) 68%, rgba(158,128,12,.45) 100%);
+              border:1px solid rgba(96,140,240,.35);
+              box-shadow:0 0 36px rgba(40,90,220,.22), inset 0 1px 0 rgba(255,255,255,.08); }
+  .side { display:flex; align-items:center; gap:14px; }
+  .medal { width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+           font-size:21px; font-weight:900; color:#fff; letter-spacing:-.03em;
+           font-family:"Arial Black","Yu Gothic UI",sans-serif; font-style:italic; }
+  .m-yk { background:radial-gradient(circle at 30% 28%, #2a4f9e, #0c1e4a); border:3px solid #d33a3a;
+          box-shadow:0 0 24px rgba(78,141,245,.8), inset 0 0 12px rgba(255,255,255,.15); }
+  .m-hs { background:radial-gradient(circle at 30% 28%, #2b2b2b, #000); border:3px solid #f5c518; color:#f5c518;
+          box-shadow:0 0 24px rgba(245,197,24,.7), inset 0 0 12px rgba(255,255,255,.1); }
+  .tn { font-size:25px; font-weight:900; }
+  .winchip { display:inline-block; margin-top:4px; padding:1.5px 12px; border-radius:12px; font-size:13px; font-weight:900;
+             color:#052b14; background:linear-gradient(90deg,#31e981,#8ff5b8); letter-spacing:.15em;
+             box-shadow:0 0 16px rgba(49,233,129,.7); }
+  .losechip { display:inline-block; margin-top:4px; padding:1.5px 12px; border-radius:12px; font-size:13px; font-weight:900;
+              color:#8b96ab; background:rgba(90,110,150,.18); border:1px solid rgba(120,140,180,.3); letter-spacing:.15em; }
+  .snum { font-size:56px; font-weight:900; line-height:1; color:#fff; text-shadow:0 0 24px rgba(255,255,255,.4); }
+  .mid { text-align:center; }
+  .mid .lb { font-size:12px; color:var(--mut); letter-spacing:.3em; margin-bottom:4px; }
+  .mid .sc { font-size:30px; color:#44567e; font-weight:900; }
+
+  /* ── メトリクス行(スウッシュ矢印+白数字+中央リングゲージ) ── */
+  .metrics { display:flex; gap:18px; margin-top:14px; align-items:center; }
+  .mbox { flex:1; position:relative; height:170px; border-radius:16px; padding:16px 18px 0; overflow:hidden;
+          background:linear-gradient(180deg,rgba(16,26,54,.80),rgba(9,15,32,.84));
+          border:1px solid rgba(90,130,220,.3); box-shadow:0 10px 26px rgba(0,0,0,.5); }
+  .mbox .lb { position:relative; z-index:2; text-align:center; font-size:15.5px; letter-spacing:.1em; font-weight:900; }
+  .lb.c-hs { color:#ffd94e; text-shadow:0 0 14px rgba(245,197,24,.5); }
+  .lb.c-yk { color:#7eb2ff; text-shadow:0 0 14px rgba(78,141,245,.55); }
+  .numw { position:relative; z-index:2; text-align:center; margin-top:12px;
+          font-size:60px; font-weight:900; line-height:1; color:#fff;
+          text-shadow:0 0 26px rgba(255,255,255,.35), 0 2px 6px rgba(0,0,0,.6); }
+  .numw .pt { font-size:27px; margin-left:2px; }
+  .numw.pos { color:#31e981; text-shadow:0 0 28px rgba(49,233,129,.7), 0 2px 6px rgba(0,0,0,.6); }
+  .numw.neg { color:#ff5d54; text-shadow:0 0 28px rgba(255,93,84,.65), 0 2px 6px rgba(0,0,0,.6); }
+  .swoosh { position:absolute; left:0; right:0; bottom:0; width:100%; height:96px; z-index:1; }
+  .mcircle { position:relative; width:218px; height:218px; flex:none; display:flex; flex-direction:column;
+             align-items:center; justify-content:center; }
+  .mcircle .ring { position:absolute; inset:0; }
+  .clbl { position:relative; z-index:2; font-size:14px; color:#cfe2ff; letter-spacing:.16em; font-weight:900; }
+  .cnum { position:relative; z-index:2; font-size:58px; font-weight:900; line-height:1.05; color:#31e981; margin-top:4px;
+          text-shadow:0 0 32px rgba(49,233,129,.8), 0 2px 6px rgba(0,0,0,.6); }
+  .cnum .pt { font-size:26px; }
+  .cwin { position:relative; z-index:2; font-size:16.5px; font-weight:900; color:var(--green); margin-top:5px;
+          letter-spacing:.12em; text-shadow:0 0 16px rgba(49,233,129,.8); }
+
+  /* ── TOP3 / WORST3 ── */
+  .sechead { display:flex; align-items:center; gap:10px; margin:20px 0 10px; }
+  .sechead .em2 { font-size:20px; font-weight:900; letter-spacing:.06em; }
+  .cols { display:flex; gap:16px; }
+  .col { flex:1; }
+  .chd { display:flex; align-items:center; gap:9px; font-size:18px; font-weight:900; margin-bottom:9px; }
+  .cdot2 { width:17px; height:17px; border-radius:50%; box-shadow:0 0 12px rgba(255,255,255,.35); }
+  .chd .sq { width:26px; height:26px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .sq.g { background:rgba(49,233,129,.18); border:1px solid rgba(49,233,129,.6); color:var(--green); }
+  .sq.r { background:rgba(255,93,84,.18); border:1px solid rgba(255,93,84,.6); color:var(--red); }
+  .item { display:flex; align-items:center; gap:12px; border-radius:13px; padding:11px 14px 13px; margin-bottom:9px;
+          position:relative; overflow:hidden;
+          background:linear-gradient(180deg,rgba(16,26,54,.82),rgba(10,17,36,.86));
+          border:1px solid rgba(90,130,220,.3); box-shadow:0 8px 22px rgba(0,0,0,.45); }
+  .mag { position:absolute; left:0; bottom:0; height:4px; border-radius:0 3px 3px 0; }
+  .mag.g { background:linear-gradient(90deg, rgba(49,233,129,.25), #31e981); box-shadow:0 0 10px rgba(49,233,129,.7); }
+  .mag.r { background:linear-gradient(90deg, rgba(255,93,84,.25), #ff5d54); box-shadow:0 0 10px rgba(255,93,84,.65); }
+  .item.first-g { border:1.5px solid rgba(49,233,129,.55); box-shadow:0 0 24px rgba(49,233,129,.18); }
+  .item.first-r { border:1.5px solid rgba(255,93,84,.5); box-shadow:0 0 24px rgba(255,93,84,.16); }
+  .rankb { min-width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+           font-size:17px; font-weight:900; color:#1a1608; }
+  .rk1 { background:radial-gradient(circle at 32% 28%, #ffe98f, #c9990e); box-shadow:0 0 20px rgba(245,197,24,.9); }
+  .rk1 svg { width:24px; height:18px; filter:drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
+  .rk2 { background:radial-gradient(circle at 32% 28%, #e8ecf4, #8d99ad); color:#222; }
+  .rk3 { background:radial-gradient(circle at 32% 28%, #e2a869, #8d5a22); color:#2b1a06; }
+  .item.it-hs { background:linear-gradient(90deg, rgba(245,197,24,.09), rgba(10,17,36,.95) 42%); }
+  .item.it-yk { background:linear-gradient(90deg, rgba(78,141,245,.10), rgba(10,17,36,.95) 42%); }
+  .itx { flex:1; }
+  .itx .l1 { font-size:16.5px; font-weight:900; }
+  .itx .l2 { font-size:12.5px; color:var(--mut2); margin-top:2px; }
+  .itx .l2 .tm { display:inline-block; padding:1px 8px; border-radius:6px; font-size:11.5px; font-weight:900; margin-right:6px; }
+  .tm.yk { background:rgba(78,141,245,.2); border:1px solid rgba(78,141,245,.55); color:#9dc0ff; }
+  .tm.hs { background:rgba(245,197,24,.16); border:1px solid rgba(245,197,24,.5); color:#ffe27a; }
+  .ival { font-size:26px; font-weight:900; }
+  .ival.g { color:var(--green); text-shadow:0 0 16px rgba(49,233,129,.6); }
+  .ival.r { color:var(--red); text-shadow:0 0 16px rgba(255,93,84,.55); }
+
+  /* ── チャート ── */
+  .chart { margin-top:14px; border:1px solid rgba(90,130,220,.3); border-radius:14px;
+           background:linear-gradient(180deg,rgba(16,26,54,.84),rgba(9,15,34,.88)); padding:13px 18px 6px;
+           box-shadow:0 12px 28px rgba(0,0,0,.45); }
+  .chead { display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; }
+  .chead .t { font-size:17px; font-weight:900; letter-spacing:.06em; color:#dbe7ff; }
+  .legend { display:flex; gap:18px; align-items:center; }
+  .lg { display:flex; align-items:center; gap:7px; font-size:13.5px; color:var(--mut2); font-weight:bold; }
+  .lg .sw { width:24px; height:5px; border-radius:3px; }
+  .final { padding:3px 14px; border-radius:9px; background:rgba(49,233,129,.14); border:1px solid rgba(49,233,129,.55);
+           color:var(--green); font-size:15px; font-weight:900; }
+
+  /* ── フッター ── */
+  .foot { display:flex; gap:16px; margin-top:16px; }
+  .fbox { flex:1; border:1px solid rgba(90,130,220,.28); border-radius:14px;
+          background:linear-gradient(180deg,rgba(16,26,54,.80),rgba(9,15,34,.84)); padding:12px 17px; }
+  .fbox h4 { font-size:13.5px; color:var(--cyan); letter-spacing:.2em; margin-bottom:7px; text-shadow:0 0 12px rgba(79,216,255,.5); }
+  .fbox .row { display:flex; justify-content:space-between; font-size:13.5px; color:var(--mut2); padding:2.5px 0; }
+  .fbox .row b { color:var(--txt); }
+  .fbox p { font-size:12.5px; color:var(--mut2); line-height:1.75; }
+  .handle { text-align:center; margin-top:13px; font-size:14.5px; color:var(--mut2); letter-spacing:.08em; }
+  .handle b { color:#dbe7ff; }
+  .wm { position:absolute; top:45%; left:50%; transform:translate(-50%,-50%) rotate(-22deg);
+        font-size:125px; font-weight:900; color:rgba(255,255,255,.04); letter-spacing:.25em; z-index:4; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="wm">SAMPLE</div>
+  <div class="streak"></div><div class="streak2"></div><div class="frame"></div>
+  <div class="beam bl"></div><div class="beam br"></div><div class="botbar"></div>
+  <div class="z">
+
+  <div class="topbar">
+    <div class="ttl">
+      <div class="ic">采</div>
+      <h1>采配の<span class="em">勝敗インパクト</span>分析</h1>
+    </div>
+    <div class="date">2026年9月2日(火)<br>◉ 神宮球場</div>
+  </div>
+
+  <div class="scorebar">
+    <div class="side"><div class="medal m-yk">YS</div>
+      <div><div class="tn">東京ヤクルト<br>スワローズ</div><span class="losechip">LOSE</span></div></div>
+    <div class="snum">1</div>
+    <div class="mid"><div class="lb">試合結果</div><div class="sc">―</div></div>
+    <div class="snum">9</div>
+    <div class="side"><div style="text-align:right"><div class="tn">阪神<br>タイガース</div><span class="winchip">WIN</span></div>
+      <div class="medal m-hs">HT</div></div>
+  </div>
+
+  <div class="metrics">
+    <div class="mbox">
+      <div class="lb c-hs">阪神のプラス効果</div>
+      <div class="numw pos">+2.8<span class="pt">点</span></div>
+      <svg class="swoosh" viewBox="0 0 340 96" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="swb" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stop-color="#1e4d9e" stop-opacity=".3"/>
+            <stop offset="60%" stop-color="#3a86e8"/>
+            <stop offset="100%" stop-color="#4fd8ff"/>
+          </linearGradient>
+        </defs>
+        <path d="M14,90 C120,86 214,62 294,24" fill="none" stroke="url(#swb)" stroke-width="18" opacity=".22" stroke-linecap="round"/>
+        <path d="M14,90 C120,86 214,62 294,24" fill="none" stroke="url(#swb)" stroke-width="7" stroke-linecap="round"
+              style="filter:drop-shadow(0 0 8px rgba(79,216,255,.8))"/>
+        <polygon points="322,8 286,10 298,38" fill="#4fd8ff" style="filter:drop-shadow(0 0 10px rgba(79,216,255,.9))"/>
+      </svg>
+    </div>
+    <div class="mcircle">
+      <svg class="ring" viewBox="0 0 218 218">
+        <defs>
+          <linearGradient id="rgB" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#2f6fe0"/><stop offset="100%" stop-color="#4fd8ff"/>
+          </linearGradient>
+        </defs>
+        <circle cx="109" cy="109" r="97" fill="rgba(20,38,80,.35)"/>
+        <circle cx="109" cy="109" r="82" fill="none" stroke="rgba(120,160,255,.14)" stroke-width="1.5" stroke-dasharray="2 7"/>
+        <path d="M66,66 Q88,109 66,152" fill="none" stroke="rgba(255,93,84,.16)" stroke-width="2.5" stroke-dasharray="4 5"/>
+        <path d="M152,66 Q130,109 152,152" fill="none" stroke="rgba(255,93,84,.16)" stroke-width="2.5" stroke-dasharray="4 5"/>
+        <circle cx="109" cy="109" r="94" fill="none" stroke="#152444" stroke-width="11"/>
+        <!-- 弧の長さ=プラス/マイナスの比率(+2.8 : 1.1 = 72% : 28%) -->
+        <circle cx="109" cy="109" r="94" fill="none" stroke="url(#rgB)" stroke-width="11" stroke-linecap="round"
+                stroke-dasharray="412 178.6" transform="rotate(-90 109 109)"
+                style="filter:drop-shadow(0 0 10px rgba(79,216,255,.75))"/>
+        <circle cx="109" cy="109" r="94" fill="none" stroke="#ff5d54" stroke-width="11" stroke-linecap="round"
+                stroke-dasharray="152 438.6" transform="rotate(172 109 109)"
+                style="filter:drop-shadow(0 0 10px rgba(255,93,84,.7))"/>
+      </svg>
+      <div class="clbl">合計インパクト</div>
+      <div class="cnum">+1.7<span class="pt">点</span></div>
+      <div class="cwin">WIN に貢献</div>
+    </div>
+    <div class="mbox">
+      <div class="lb c-yk">ヤクルトのマイナス効果</div>
+      <div class="numw neg">-1.1<span class="pt">点</span></div>
+      <svg class="swoosh" viewBox="0 0 340 96" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="swr" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#7d1f18" stop-opacity=".35"/>
+            <stop offset="60%" stop-color="#e04a40"/>
+            <stop offset="100%" stop-color="#ff7a6e"/>
+          </linearGradient>
+        </defs>
+        <path d="M14,16 C120,22 214,48 294,74" fill="none" stroke="url(#swr)" stroke-width="18" opacity=".22" stroke-linecap="round"/>
+        <path d="M14,16 C120,22 214,48 294,74" fill="none" stroke="url(#swr)" stroke-width="7" stroke-linecap="round"
+              style="filter:drop-shadow(0 0 8px rgba(255,93,84,.8))"/>
+        <polygon points="322,88 298,58 286,86" fill="#ff7a6e" style="filter:drop-shadow(0 0 10px rgba(255,93,84,.9))"/>
+      </svg>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:16px; margin-top:20px;">
+    <div class="col">
+      <div class="chd"><div class="cdot2" style="background:#4e8df5"></div>ヤクルトの采配 TOP 3</div>
+      <div class="item first-r it-yk">
+        <div class="rankb rk1"><svg viewBox="0 0 24 16"><path d="M2 15 L3.5 5 L8.5 9.5 L12 1.5 L15.5 9.5 L20.5 5 L22 15 Z" fill="#7a5c05"/></svg></div>
+        <div class="itx"><div class="l1">7回裏 代打・◯◯ 得点圏で凡退</div>
+          <div class="l2">対左に弱い代打の起用が裏目</div></div>
+        <div class="ival r">-0.67</div><div class="mag r" style="width:82%"></div>
+      </div>
+      <div class="item it-yk">
+        <div class="rankb rk2">2</div>
+        <div class="itx"><div class="l1">5回裏 継投: 桐敷 → セベリーノ</div>
+          <div class="l2">失点拡大を止めた好継投</div></div>
+        <div class="ival g">+0.44</div><div class="mag g" style="width:54%"></div>
+      </div>
+      <div class="item it-yk">
+        <div class="rankb rk3">3</div>
+        <div class="itx"><div class="l1">2回裏 送りバント(山野)</div>
+          <div class="l2">0死1・2塁 強攻の方が優位だった</div></div>
+        <div class="ival r">-0.41</div><div class="mag r" style="width:50%"></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="chd"><div class="cdot2" style="background:#f5c518"></div>阪神の采配 TOP 3</div>
+      <div class="item first-g it-hs">
+        <div class="rankb rk1"><svg viewBox="0 0 24 16"><path d="M2 15 L3.5 5 L8.5 9.5 L12 1.5 L15.5 9.5 L20.5 5 L22 15 Z" fill="#7a5c05"/></svg></div>
+        <div class="itx"><div class="l1">4回裏 継投: 西勇 → 桐敷</div>
+          <div class="l2">3巡目に入る前の早期スイッチ</div></div>
+        <div class="ival g">+0.82</div><div class="mag g" style="width:100%"></div>
+      </div>
+      <div class="item it-hs">
+        <div class="rankb rk2">2</div>
+        <div class="itx"><div class="l1">6回表 代打・◯◯(適時打)</div>
+          <div class="l2">左右相性を突いた起用</div></div>
+        <div class="ival g">+0.61</div><div class="mag g" style="width:74%"></div>
+      </div>
+      <div class="item it-hs">
+        <div class="rankb rk3">3</div>
+        <div class="itx"><div class="l1">3回表 送りバント(西勇)</div>
+          <div class="l2">1死1塁からの手放しアウト</div></div>
+        <div class="ival r">-0.47</div><div class="mag r" style="width:57%"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart">
+    <div class="chead">
+      <div class="t">采配インパクトの推移</div>
+      <div class="legend">
+        <div class="lg"><div class="sw" style="background:var(--blue); box-shadow:0 0 10px rgba(78,141,245,.8)"></div>ヤクルト</div>
+        <div class="lg"><div class="sw" style="background:var(--gold); box-shadow:0 0 10px rgba(245,197,24,.8)"></div>阪神</div>
+        <div class="final">最終インパクト +1.7点</div>
+      </div>
+    </div>
+    <svg width="976" height="280" viewBox="0 0 976 280">
+      <defs>
+        <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f5c518" stop-opacity=".35"/><stop offset="100%" stop-color="#f5c518" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="gb" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#4e8df5" stop-opacity=".30"/><stop offset="100%" stop-color="#4e8df5" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <g stroke="#182746" stroke-width="1">
+        <line x1="44" y1="28" x2="856" y2="28"/><line x1="44" y1="58" x2="856" y2="58"/>
+        <line x1="44" y1="88" x2="856" y2="88"/><line x1="44" y1="148" x2="856" y2="148"/>
+        <line x1="44" y1="178" x2="856" y2="178"/>
+      </g>
+      <rect x="386" y="16" width="104" height="196" fill="rgba(49,233,129,.055)"/><line x1="386" y1="16" x2="386" y2="212" stroke="rgba(49,233,129,.20)" stroke-width="1"/><line x1="490" y1="16" x2="490" y2="212" stroke="rgba(49,233,129,.20)" stroke-width="1"/><line x1="44" y1="118" x2="856" y2="118" stroke="#41598f" stroke-width="1.8" stroke-dasharray="2 4"/>
+      <g fill="#5d70a0" font-size="12.5" font-weight="bold">
+        <text x="8" y="33">+3.0</text><text x="8" y="63">+2.0</text><text x="8" y="93">+1.0</text>
+        <text x="14" y="123">0.0</text><text x="8" y="153">-1.0</text><text x="8" y="183">-2.0</text>
+      </g>
+
+      <path fill="url(#gg)" d="M44.0,118.0 L52.5,118.0 L52.5,117.2 L60.9,117.2 L69.3,117.2 L69.3,118.1 L77.8,118.1 L86.3,118.1 L86.3,118.0 L94.8,118.0 L103.2,118.0 L103.2,117.7 L111.7,117.7 L120.2,117.7 L120.2,117.9 L128.6,117.9 L137.1,117.9 L137.1,118.1 L145.5,118.1 L153.9,118.1 L153.9,117.0 L162.4,117.0 L170.9,117.0 L170.9,115.2 L179.3,115.2 L187.8,115.2 L187.8,115.3 L196.2,115.3 L204.7,115.3 L204.7,119.1 L213.2,119.1 L221.6,119.1 L221.6,123.8 L230.1,123.8 L238.6,123.8 L238.6,127.2 L247.0,127.2 L255.4,127.2 L255.4,128.9 L263.9,128.9 L272.4,128.9 L272.4,130.2 L280.8,130.2 L289.3,130.2 L289.3,126.9 L297.8,126.9 L306.2,126.9 L306.2,120.7 L314.7,120.7 L323.1,120.7 L323.1,114.1 L331.6,114.1 L340.1,114.1 L340.1,107.2 L348.5,107.2 L356.9,107.2 L356.9,104.4 L365.4,104.4 L373.9,104.4 L373.9,103.8 L382.3,103.8 L390.8,103.8 L390.8,102.9 L399.2,102.9 L407.7,102.9 L407.7,100.2 L416.2,100.2 L424.6,100.2 L424.6,96.0 L433.1,96.0 L441.6,96.0 L441.6,92.5 L450.0,92.5 L458.4,92.5 L458.4,90.9 L466.9,90.9 L475.4,90.9 L475.4,90.3 L483.8,90.3 L492.3,90.3 L492.3,89.8 L500.8,89.8 L509.2,89.8 L509.2,88.8 L517.7,88.8 L526.2,88.8 L526.2,87.8 L534.6,87.8 L543.0,87.8 L543.0,87.3 L551.5,87.3 L560.0,87.3 L560.0,86.4 L568.4,86.4 L576.8,86.4 L576.8,84.4 L585.3,84.4 L593.8,84.4 L593.8,82.2 L602.2,82.2 L610.7,82.2 L610.7,80.1 L619.2,80.1 L627.7,80.1 L627.7,78.0 L636.1,78.0 L644.5,78.0 L644.5,75.9 L653.0,75.9 L661.5,75.9 L661.5,72.1 L669.9,72.1 L678.3,72.1 L678.3,66.8 L686.8,66.8 L695.3,66.8 L695.3,61.6 L703.8,61.6 L712.2,61.6 L712.2,58.1 L720.7,58.1 L729.2,58.1 L729.2,55.4 L737.6,55.4 L746.0,55.4 L746.0,52.2 L754.5,52.2 L763.0,52.2 L763.0,48.9 L771.4,48.9 L779.8,48.9 L779.8,46.5 L788.3,46.5 L796.8,46.5 L796.8,44.8 L805.2,44.8 L813.7,44.8 L813.7,42.2 L822.2,42.2 L830.7,42.2 L830.7,37.8 L839.1,37.8 L847.5,37.8 L847.5,34.0 L856.0,34.0 L856,118 L44,118 Z"/>
+      <path fill="url(#gb)" d="M44.0,118.0 L52.5,118.0 L52.5,119.6 L60.9,119.6 L69.3,119.6 L69.3,120.1 L77.8,120.1 L86.3,120.1 L86.3,118.9 L94.8,118.9 L103.2,118.9 L103.2,117.2 L111.7,117.2 L120.2,117.2 L120.2,116.9 L128.6,116.9 L137.1,116.9 L137.1,118.5 L145.5,118.5 L153.9,118.5 L153.9,120.4 L162.4,120.4 L170.9,120.4 L170.9,122.8 L179.3,122.8 L187.8,122.8 L187.8,124.4 L196.2,124.4 L204.7,124.4 L204.7,126.1 L213.2,126.1 L221.6,126.1 L221.6,128.4 L230.1,128.4 L238.6,128.4 L238.6,130.5 L247.0,130.5 L255.4,130.5 L255.4,128.8 L263.9,128.8 L272.4,128.8 L272.4,127.2 L280.8,127.2 L289.3,127.2 L289.3,127.2 L297.8,127.2 L306.2,127.2 L306.2,128.4 L314.7,128.4 L323.1,128.4 L323.1,128.6 L331.6,128.6 L340.1,128.6 L340.1,126.9 L348.5,126.9 L356.9,126.9 L356.9,124.1 L365.4,124.1 L373.9,124.1 L373.9,122.3 L382.3,122.3 L390.8,122.3 L390.8,122.0 L399.2,122.0 L407.7,122.0 L407.7,121.9 L416.2,121.9 L424.6,121.9 L424.6,121.2 L433.1,121.2 L441.6,121.2 L441.6,120.2 L450.0,120.2 L458.4,120.2 L458.4,119.9 L466.9,119.9 L475.4,119.9 L475.4,119.7 L483.8,119.7 L492.3,119.7 L492.3,118.5 L500.8,118.5 L509.2,118.5 L509.2,116.4 L517.7,116.4 L526.2,116.4 L526.2,117.5 L534.6,117.5 L543.0,117.5 L543.0,120.5 L551.5,120.5 L560.0,120.5 L560.0,125.0 L568.4,125.0 L576.8,125.0 L576.8,129.2 L585.3,129.2 L593.8,129.2 L593.8,131.7 L602.2,131.7 L610.7,131.7 L610.7,133.4 L619.2,133.4 L627.7,133.4 L627.7,135.2 L636.1,135.2 L644.5,135.2 L644.5,137.2 L653.0,137.2 L661.5,137.2 L661.5,138.8 L669.9,138.8 L678.3,138.8 L678.3,139.9 L686.8,139.9 L695.3,139.9 L695.3,141.7 L703.8,141.7 L712.2,141.7 L712.2,144.9 L720.7,144.9 L729.2,144.9 L729.2,148.4 L737.6,148.4 L746.0,148.4 L746.0,149.4 L754.5,149.4 L763.0,149.4 L763.0,148.5 L771.4,148.5 L779.8,148.5 L779.8,147.2 L788.3,147.2 L796.8,147.2 L796.8,147.4 L805.2,147.4 L813.7,147.4 L813.7,149.0 L822.2,149.0 L830.7,149.0 L830.7,150.5 L839.1,150.5 L847.5,150.5 L847.5,151.0 L856.0,151.0 L856,118 L44,118 Z"/>
+      <path fill="none" stroke="#4a86e8" stroke-width="3.2" stroke-linejoin="round"
+            style="filter:drop-shadow(0 0 5px rgba(74,134,232,.8))" d="M44.0,118.0 L52.5,118.0 L52.5,119.6 L60.9,119.6 L69.3,119.6 L69.3,120.1 L77.8,120.1 L86.3,120.1 L86.3,118.9 L94.8,118.9 L103.2,118.9 L103.2,117.2 L111.7,117.2 L120.2,117.2 L120.2,116.9 L128.6,116.9 L137.1,116.9 L137.1,118.5 L145.5,118.5 L153.9,118.5 L153.9,120.4 L162.4,120.4 L170.9,120.4 L170.9,122.8 L179.3,122.8 L187.8,122.8 L187.8,124.4 L196.2,124.4 L204.7,124.4 L204.7,126.1 L213.2,126.1 L221.6,126.1 L221.6,128.4 L230.1,128.4 L238.6,128.4 L238.6,130.5 L247.0,130.5 L255.4,130.5 L255.4,128.8 L263.9,128.8 L272.4,128.8 L272.4,127.2 L280.8,127.2 L289.3,127.2 L289.3,127.2 L297.8,127.2 L306.2,127.2 L306.2,128.4 L314.7,128.4 L323.1,128.4 L323.1,128.6 L331.6,128.6 L340.1,128.6 L340.1,126.9 L348.5,126.9 L356.9,126.9 L356.9,124.1 L365.4,124.1 L373.9,124.1 L373.9,122.3 L382.3,122.3 L390.8,122.3 L390.8,122.0 L399.2,122.0 L407.7,122.0 L407.7,121.9 L416.2,121.9 L424.6,121.9 L424.6,121.2 L433.1,121.2 L441.6,121.2 L441.6,120.2 L450.0,120.2 L458.4,120.2 L458.4,119.9 L466.9,119.9 L475.4,119.9 L475.4,119.7 L483.8,119.7 L492.3,119.7 L492.3,118.5 L500.8,118.5 L509.2,118.5 L509.2,116.4 L517.7,116.4 L526.2,116.4 L526.2,117.5 L534.6,117.5 L543.0,117.5 L543.0,120.5 L551.5,120.5 L560.0,120.5 L560.0,125.0 L568.4,125.0 L576.8,125.0 L576.8,129.2 L585.3,129.2 L593.8,129.2 L593.8,131.7 L602.2,131.7 L610.7,131.7 L610.7,133.4 L619.2,133.4 L627.7,133.4 L627.7,135.2 L636.1,135.2 L644.5,135.2 L644.5,137.2 L653.0,137.2 L661.5,137.2 L661.5,138.8 L669.9,138.8 L678.3,138.8 L678.3,139.9 L686.8,139.9 L695.3,139.9 L695.3,141.7 L703.8,141.7 L712.2,141.7 L712.2,144.9 L720.7,144.9 L729.2,144.9 L729.2,148.4 L737.6,148.4 L746.0,148.4 L746.0,149.4 L754.5,149.4 L763.0,149.4 L763.0,148.5 L771.4,148.5 L779.8,148.5 L779.8,147.2 L788.3,147.2 L796.8,147.2 L796.8,147.4 L805.2,147.4 L813.7,147.4 L813.7,149.0 L822.2,149.0 L830.7,149.0 L830.7,150.5 L839.1,150.5 L847.5,150.5 L847.5,151.0 L856.0,151.0 "/>
+      <path fill="none" stroke="#ffd23e" stroke-width="3.2" stroke-linejoin="round"
+            style="filter:drop-shadow(0 0 5px rgba(255,210,62,.85))" d="M44.0,118.0 L52.5,118.0 L52.5,117.2 L60.9,117.2 L69.3,117.2 L69.3,118.1 L77.8,118.1 L86.3,118.1 L86.3,118.0 L94.8,118.0 L103.2,118.0 L103.2,117.7 L111.7,117.7 L120.2,117.7 L120.2,117.9 L128.6,117.9 L137.1,117.9 L137.1,118.1 L145.5,118.1 L153.9,118.1 L153.9,117.0 L162.4,117.0 L170.9,117.0 L170.9,115.2 L179.3,115.2 L187.8,115.2 L187.8,115.3 L196.2,115.3 L204.7,115.3 L204.7,119.1 L213.2,119.1 L221.6,119.1 L221.6,123.8 L230.1,123.8 L238.6,123.8 L238.6,127.2 L247.0,127.2 L255.4,127.2 L255.4,128.9 L263.9,128.9 L272.4,128.9 L272.4,130.2 L280.8,130.2 L289.3,130.2 L289.3,126.9 L297.8,126.9 L306.2,126.9 L306.2,120.7 L314.7,120.7 L323.1,120.7 L323.1,114.1 L331.6,114.1 L340.1,114.1 L340.1,107.2 L348.5,107.2 L356.9,107.2 L356.9,104.4 L365.4,104.4 L373.9,104.4 L373.9,103.8 L382.3,103.8 L390.8,103.8 L390.8,102.9 L399.2,102.9 L407.7,102.9 L407.7,100.2 L416.2,100.2 L424.6,100.2 L424.6,96.0 L433.1,96.0 L441.6,96.0 L441.6,92.5 L450.0,92.5 L458.4,92.5 L458.4,90.9 L466.9,90.9 L475.4,90.9 L475.4,90.3 L483.8,90.3 L492.3,90.3 L492.3,89.8 L500.8,89.8 L509.2,89.8 L509.2,88.8 L517.7,88.8 L526.2,88.8 L526.2,87.8 L534.6,87.8 L543.0,87.8 L543.0,87.3 L551.5,87.3 L560.0,87.3 L560.0,86.4 L568.4,86.4 L576.8,86.4 L576.8,84.4 L585.3,84.4 L593.8,84.4 L593.8,82.2 L602.2,82.2 L610.7,82.2 L610.7,80.1 L619.2,80.1 L627.7,80.1 L627.7,78.0 L636.1,78.0 L644.5,78.0 L644.5,75.9 L653.0,75.9 L661.5,75.9 L661.5,72.1 L669.9,72.1 L678.3,72.1 L678.3,66.8 L686.8,66.8 L695.3,66.8 L695.3,61.6 L703.8,61.6 L712.2,61.6 L712.2,58.1 L720.7,58.1 L729.2,58.1 L729.2,55.4 L737.6,55.4 L746.0,55.4 L746.0,52.2 L754.5,52.2 L763.0,52.2 L763.0,48.9 L771.4,48.9 L779.8,48.9 L779.8,46.5 L788.3,46.5 L796.8,46.5 L796.8,44.8 L805.2,44.8 L813.7,44.8 L813.7,42.2 L822.2,42.2 L830.7,42.2 L830.7,37.8 L839.1,37.8 L847.5,37.8 L847.5,34.0 L856.0,34.0 "/>
+      <circle cx="856.0" cy="34.0" r="6" fill="#ffd23e" style="filter:drop-shadow(0 0 8px rgba(255,210,62,1))"/>
+      <circle cx="856.0" cy="151.0" r="6" fill="#4a86e8" style="filter:drop-shadow(0 0 8px rgba(74,134,232,1))"/>
+
+      <!-- コールアウト(3行構成: 回/説明/値) -->
+      <g>
+        <rect x="180" y="10" rx="6" width="150" height="58" fill="#101b33" stroke="rgba(255,93,84,.6)" stroke-width="1.2"/>
+        <text x="192" y="27" fill="#7e8db0" font-size="12" font-weight="bold">3回表</text>
+        <text x="192" y="43" fill="#e6ecf5" font-size="12.5" font-weight="bold">送りバントが裏目</text>
+        <text x="192" y="60" fill="#ff5d54" font-size="15" font-weight="900">-0.47点</text>
+        <line x1="255" y1="68" x2="272" y2="127.5" stroke="rgba(255,93,84,.55)" stroke-width="1.4"/>
+
+        <rect x="340" y="8" rx="6" width="158" height="58" fill="#101b33" stroke="rgba(49,233,129,.6)" stroke-width="1.2"/>
+        <text x="352" y="25" fill="#7e8db0" font-size="12" font-weight="bold">4回裏</text>
+        <text x="352" y="41" fill="#e6ecf5" font-size="12.5" font-weight="bold">早期継投がピンチを断つ</text>
+        <text x="352" y="58" fill="#31e981" font-size="15" font-weight="900">+0.82点</text>
+        <line x1="415" y1="66" x2="428" y2="100.0" stroke="rgba(49,233,129,.55)" stroke-width="1.4"/>
+
+        <rect x="560" y="150" rx="6" width="158" height="58" fill="#101b33" stroke="rgba(255,93,84,.6)" stroke-width="1.2"/>
+        <text x="572" y="167" fill="#7e8db0" font-size="12" font-weight="bold">7回裏</text>
+        <text x="572" y="183" fill="#e6ecf5" font-size="12.5" font-weight="bold">代打策が凡退で失速</text>
+        <text x="572" y="200" fill="#ff5d54" font-size="15" font-weight="900">-0.67点</text>
+        <line x1="620" y1="150" x2="608" y2="138.5" stroke="rgba(255,93,84,.55)" stroke-width="1.4"/>
+
+        <rect x="640" y="24" rx="6" width="150" height="58" fill="#101b33" stroke="rgba(49,233,129,.6)" stroke-width="1.2"/>
+        <text x="652" y="41" fill="#7e8db0" font-size="12" font-weight="bold">8回表</text>
+        <text x="652" y="57" fill="#e6ecf5" font-size="12.5" font-weight="bold">勝負代打が適時打</text>
+        <text x="652" y="74" fill="#31e981" font-size="15" font-weight="900">+0.61点</text>
+        <line x1="712" y1="82" x2="726" y2="70.0" stroke="rgba(49,233,129,.55)" stroke-width="1.4"/>
+      </g>
+
+      <!-- 右カラム: 最終インパクト -->
+      <g>
+        <line x1="868" y1="14" x2="868" y2="210" stroke="#1d2c4e" stroke-width="1.5"/>
+        <text x="880" y="30" fill="#7e8db0" font-size="13" font-weight="bold" letter-spacing="2">最終インパクト</text>
+        <text x="878" y="72" fill="#31e981" font-size="38" font-weight="900"
+              style="filter:drop-shadow(0 0 14px rgba(49,233,129,.8))">+1.7点</text>
+        <line x1="878" y1="92" x2="962" y2="92" stroke="#1d2c4e" stroke-width="1.2"/>
+        <text x="880" y="116" fill="#ffd23e" font-size="16" font-weight="900">阪神</text>
+        <text x="880" y="138" fill="#31e981" font-size="21" font-weight="900" style="filter:drop-shadow(0 0 10px rgba(49,233,129,.8))">+2.8点</text>
+        <text x="880" y="168" fill="#7ea8f0" font-size="16" font-weight="900">ヤクルト</text>
+        <text x="880" y="190" fill="#ff5d54" font-size="21" font-weight="900" style="filter:drop-shadow(0 0 10px rgba(255,93,84,.75))">-1.1点</text>
+      </g>
+
+      <g font-size="13" fill="#5d70a0" text-anchor="middle" font-weight="bold">
+        <text x="130" y="235">1回</text><text x="220" y="235">2回</text><text x="310" y="235">3回</text>
+        <text x="400" y="235">4回</text><text x="490" y="235">5回</text><text x="580" y="235">6回</text>
+        <text x="670" y="235">7回</text><text x="760" y="235">8回</text><text x="845" y="235">9回</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="foot">
+    <div class="fbox">
+      <h4>試合情報</h4>
+      <div class="row"><span>開始 / 試合時間</span><b>18:00 / 3:28</b></div>
+      <div class="row"><span>采配イベント</span><b>10件</b></div>
+      <div class="row"><span>内訳</span><b>バント3・継投4・代打3</b></div>
+    </div>
+    <div class="fbox">
+      <h4>分析について</h4>
+      <p>塁・アウト状況の得点期待値(RE24)で「指示の瞬間」を採点。結果論ではなく、
+         選手の実行(成否)と分離した監督の判断そのものの評価です。</p>
+    </div>
+    <div class="fbox">
+      <h4>注記</h4>
+      <p>数値=得点期待値の変化(点)。プラス=自軍に有利な指示。
+         盗塁など指示か選手判断か不明なものは集計対象外。印象・感情は含みません。</p>
+    </div>
+  </div>
+
+  <div class="handle"><b>@saihaiscore_lab</b>|計算方法はnoteで全公開|データ: NPB公式記録より自動集計</div>
+  </div>
+</div>
+</body>
+</html>

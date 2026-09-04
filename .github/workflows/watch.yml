@@ -1,0 +1,49 @@
+# 試合見張り→終了直後にカード生成→Discord配達(9/4 GitHub移行)
+# 昼便12:30 JST(デーゲーム)と夜便17:30 JST。昼便は17:15で必ず退出し夜便が未配達分を引き取る
+name: watch-games
+on:
+  schedule:
+    - cron: '30 3 * * *'   # 12:30 JST 昼便
+    - cron: '30 8 * * *'   # 17:30 JST 夜便
+  workflow_dispatch:
+    inputs:
+      mmdd:
+        description: 'MMDD(省略=今日JST)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      games: ${{ steps.p.outputs.games }}
+      mmdd: ${{ steps.p.outputs.mmdd }}
+      has: ${{ steps.p.outputs.has }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        env:
+          MMDD: ${{ inputs.mmdd }}
+        run: python3 src/cloud_plan.py
+
+  watch:
+    needs: plan
+    if: needs.plan.outputs.has == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      matrix:
+        gid: ${{ fromJSON(needs.plan.outputs.games) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 日本語フォント
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+      - name: 見張り→カード→Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          BROWSER_BIN: /usr/bin/google-chrome
+          DEADLINE: ${{ github.event.schedule == '30 3 * * *' && '17:15' || '23:20' }}
+        run: python3 src/cloud_watch.py ${{ needs.plan.outputs.mmdd }} ${{ matrix.gid }} --deadline $DEADLINE

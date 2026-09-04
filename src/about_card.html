@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",Meiryo,sans-serif; }
+  body { width:1080px; background:#eef1f7; color:#16213c; }
+  .card { position:relative; width:1080px; height:1020px; padding:34px 44px 30px; overflow:hidden;
+          background:
+            radial-gradient(ellipse 860px 500px at 50% -10%, rgba(56,116,255,.10), transparent 60%),
+            radial-gradient(ellipse 700px 380px at 0% 100%, rgba(46,100,230,.05), transparent 60%),
+            radial-gradient(ellipse 700px 380px at 100% 100%, rgba(200,160,20,.05), transparent 60%),
+            #eef1f7; }
+  .hd { display:flex; align-items:center; gap:14px; margin-bottom:6px; }
+  .ic { width:44px; height:44px; border-radius:11px; background:linear-gradient(135deg,#2f6fe0,#1673c9);
+        display:flex; align-items:center; justify-content:center; font-size:23px; font-weight:900; color:#fff; }
+  .hd h1 { font-size:30px; font-weight:900; letter-spacing:.02em; }
+  .hd .at { margin-left:auto; font-size:16px; font-weight:900; color:#5d6a86; }
+  .lead { font-size:19px; font-weight:700; color:#2c3a5c; margin:10px 2px 18px; line-height:1.65; }
+  .lead b { color:#1673c9; }
+  .box { background:rgba(255,255,255,.92); border:1px solid #dde4f0; border-radius:15px;
+         padding:18px 22px; margin-bottom:14px; box-shadow:0 2px 10px rgba(22,33,60,.05); }
+  .bt { font-size:17px; font-weight:900; letter-spacing:.12em; color:#1673c9; margin-bottom:10px; }
+  .bt.warn { color:#c07a08; }
+  .big { font-size:25px; font-weight:900; margin-bottom:8px; }
+  .big .g { color:#0d9e55; } .big .r { color:#dd3d35; }
+  p { font-size:16.5px; line-height:1.7; color:#2c3a5c; }
+  p b { color:#16213c; }
+  .ex { display:flex; align-items:center; gap:12px; background:#f7f9fd; border:1px solid #e3e9f4;
+        border-radius:11px; padding:10px 16px; margin-top:12px; }
+  .ex .no { min-width:30px; height:30px; border-radius:50%; background:radial-gradient(circle at 32% 28%, #ffe98f, #c9990e);
+            display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px; color:#1a1608; }
+  .ex .tx { flex:1; }
+  .ex .tx .a { font-size:16px; font-weight:900; }
+  .ex .tx .b { font-size:12.5px; color:#5d6a86; margin-top:1px; }
+  .ex .v { text-align:center; }
+  .ex .v .n { font-size:22px; font-weight:900; color:#0d9e55; }
+  .ex .v .s { font-size:10.5px; font-weight:900; letter-spacing:2px; color:#0d9e55; opacity:.8; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { padding:6px 15px; border-radius:999px; background:#eaf1fd; border:1px solid #c9d8f0;
+          font-size:15.5px; font-weight:900; color:#2455a4; }
+  .no-list { list-style:none; }
+  .no-list li { font-size:16px; line-height:1.75; color:#2c3a5c; padding-left:26px; position:relative; }
+  .no-list li::before { content:"×"; position:absolute; left:2px; color:#b8302a; font-weight:900; }
+  .no-list li b { color:#16213c; }
+  .no-list li span { color:#5d6a86; font-size:14.5px; }
+  .cols { display:flex; gap:14px; }
+  .cols .box { flex:1; margin-bottom:0; }
+  .ft { text-align:center; font-size:13.5px; color:#5d6a86; font-weight:700; margin-top:16px; }
+</style></head><body>
+<div class="card">
+  <div class="hd"><div class="ic">采</div><h1>このアカウントについて</h1><div class="at">@saihaiscore_lab</div></div>
+  <div class="lead">NPB全試合の<b>「監督の采配」</b>を毎日データで採点し、1試合1枚の画像で投稿します。</div>
+
+  <div class="box">
+    <div class="bt">数字の意味</div>
+    <div class="big">采配の値 = 指示を出した<u>瞬間</u>の期待値の変化 <span class="g">+は有利</span>・<span class="r">−は不利</span></div>
+    <p><b>結果は一切使いません。</b>バントが失敗しても、指示の瞬間に正しければプラス。
+       ヒットになっても、分の悪い賭けならマイナス。「結果論」ではなく<b>判断の質そのもの</b>を測ります。</p>
+    <div class="ex">
+      <div class="no">1</div>
+      <div class="tx"><div class="a">8回 代打・勝又(元:東=投手)</div><div class="b">代打 ・ 得点期待 0.15 → 0.31点</div></div>
+      <div class="v"><div class="n">+0.17</div><div class="s">得点増</div></div>
+    </div>
+    <p style="margin-top:10px; font-size:14.5px; color:#5d6a86">
+      計算には今季全試合の実測データ・選手個人の直近成績・相手投手との相性・走者の走力を使用。
+      終盤の接戦は「1点を取る/防ぐ確率」で判定します。</p>
+  </div>
+
+  <div class="cols">
+    <div class="box">
+      <div class="bt">評価しているもの</div>
+      <div class="chips">
+        <div class="chip">送りバント</div><div class="chip">スクイズ</div><div class="chip">代打</div>
+        <div class="chip">代走</div><div class="chip">継投</div><div class="chip">申告敬遠</div>
+        <div class="chip">定石場面での強攻</div>
+      </div>
+    </div>
+  </div>
+  <div class="box" style="margin-top:14px">
+    <div class="bt">評価していないもの(正直に)</div>
+    <ul class="no-list">
+      <li><b>スタメン・打順の組み方</b> <span>— 今後、週次企画として別途分析予定</span></li>
+      <li><b>盗塁</b> <span>— ベンチのサインか選手の判断か、外からは分からないため</span></li>
+      <li><b>守備位置・シフト</b> <span>— 公式記録に残らないため</span></li>
+      <li><b>「流れ」「雰囲気」など数値化できないもの</b></li>
+      <li><b>選手の実行力(バントの上手下手など)</b> <span>— それは選手の力。采配と分離して評価します</span></li>
+    </ul>
+  </div>
+
+  <div class="box">
+    <div class="bt warn">⚠ 試験運用中(β版)です</div>
+    <p>計算式は改良を続けており、数字が変わることがあります。計算方法の全文はnoteで公開予定。
+       <b>「ここおかしくない?」という指摘は大歓迎です</b>——それがこのアカウントの精度を上げます。</p>
+  </div>
+
+  <div class="ft">データ: NPB公式記録より自動集計 ・ 映像/ロゴは使用しません ・ 印象/感情は含みません</div>
+</div>
+</body></html>
