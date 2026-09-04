@@ -67,12 +67,13 @@ def parse_meta(mmdd, gid):
                 toks.append(t)
             elif toks:
                 break
-        return int(toks[-3])  # [...イニング, 計, H, E]
+        return int(toks[-3]), len(toks) - 3  # [...イニング, 計, H, E] → (計, イニング数)
     try:
-        sc_away, sc_home = final_score(away_full), final_score(home_full)
+        (sc_away, inn_a), (sc_home, inn_h) = final_score(away_full), final_score(home_full)
+        innings = max(inn_a, inn_h)  # コールドは実回数・延長は10回以上になる
     except Exception:
-        sc_away = sc_home = 0
-    return {"date": date, "venue": venue, "gametime": gametime,
+        sc_away = sc_home = innings = 0
+    return {"date": date, "venue": venue, "gametime": gametime, "innings": innings,
             "away": away, "home": home, "sc_away": sc_away, "sc_home": sc_home}
 
 
@@ -260,7 +261,9 @@ def build(mmdd, gid, render_png=False, light=False):
         return o
 
     vals_main = [x for x in vals if not x.get("ref")]
-    max_inn = max((x["inning"] for x in vals_main), default=9)
+    # チャートは試合の実イニング数まで描く(9/4指摘: 采配が6回で最後だと6回までに見えた)
+    max_inn = max(meta.get("innings", 0),
+                  max((x["inning"] for x in vals_main), default=9)) or 9
     ac, hc = cum(AWAY["short"], max_inn), cum(HOME["short"], max_inn)
     lim = max(0.5, max(abs(v) for v in ac + hc))
     X0, X1, BASEY = 44, 856, 118
