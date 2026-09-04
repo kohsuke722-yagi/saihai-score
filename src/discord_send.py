@@ -15,13 +15,17 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
+def _clean(u):
+    return u.strip().lstrip("﻿").strip()  # BOM混入対策(PowerShellパイプ由来の実害あり 9/4)
+
+
 def webhook_url():
-    url = os.environ.get("DISCORD_WEBHOOK", "").strip()
+    url = _clean(os.environ.get("DISCORD_WEBHOOK", ""))
     if url:
         return url
     p = os.path.join(BASE, ".secrets", "discord_webhook")
     if os.path.exists(p):
-        return open(p, encoding="utf-8").read().strip()
+        return _clean(open(p, encoding="utf-8").read())
     raise SystemExit("Webhook URLが無い: 環境変数DISCORD_WEBHOOK か .secrets/discord_webhook を用意")
 
 
