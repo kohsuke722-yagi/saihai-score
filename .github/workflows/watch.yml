@@ -1,10 +1,15 @@
 # 試合見張り→終了直後にカード生成→Discord配達(9/4 GitHub移行)
-# 昼便12:30 JST(デーゲーム)と夜便17:30 JST。昼便は17:15で必ず退出し夜便が未配達分を引き取る
+# GitHubのcronは大幅遅延・不発があるため発火チャンスを1日5回に分散(9/4夜の実測: 昼便4.5h遅延+夜便不発)。
+# concurrencyで同時実行を禁止(=二重配達防止)。postedマーカーで配達済み試合はスキップ。
+# 昼便(12時台)は17:15で必ず退出し、夕方以降の便が未配達分を引き取る
 name: watch-games
 on:
   schedule:
-    - cron: '30 3 * * *'   # 12:30 JST 昼便
-    - cron: '30 8 * * *'   # 17:30 JST 夜便
+    - cron: '17 3 * * *'   # 12:17 JST 昼便
+    - cron: '57 3 * * *'   # 12:57 JST 昼便バックアップ
+    - cron: '47 8 * * *'   # 17:47 JST 夜便
+    - cron: '27 9 * * *'   # 18:27 JST 夜便バックアップ1
+    - cron: '7 10 * * *'   # 19:07 JST 夜便バックアップ2
   workflow_dispatch:
     inputs:
       mmdd:
@@ -13,6 +18,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: watch-games
+  cancel-in-progress: false
 
 jobs:
   plan:
@@ -45,5 +54,5 @@ jobs:
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           BROWSER_BIN: /usr/bin/google-chrome
-          DEADLINE: ${{ github.event.schedule == '30 3 * * *' && '17:15' || '23:20' }}
+          DEADLINE: ${{ (github.event.schedule == '17 3 * * *' || github.event.schedule == '57 3 * * *') && '17:15' || '23:20' }}
         run: python3 src/cloud_watch.py ${{ needs.plan.outputs.mmdd }} ${{ matrix.gid }} --deadline $DEADLINE
