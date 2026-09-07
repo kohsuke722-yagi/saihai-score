@@ -14,7 +14,7 @@ import sys, os, re, json
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from analyze import RE, re_of, ps_of, HAS_RETAB  # noqa
+from analyze import RE, re_of, ps_of, HAS_RETAB, wp_of, wp_end, HAS_WP  # noqa
 from runners import annotate, parse_box_subs, REACH  # noqa
 from stats import fetch_player, odds_combine, platoon_adjust, LEAGUE  # noqa
 from stats2 import batter_dist2, pitcher_dist2, effective_n, league_meta, dp_prob  # noqa
@@ -241,6 +241,29 @@ def ps_state(state, outs, dist, k, cont=None, p_dp=None, adv=None):
             total += p
         elif nouts < 3:
             total += p * cont(ns, nouts, k - runs)
+    return total
+
+
+def wp_state(inning, half, st, outs, diff, dist, cont=None, p_dp=None, adv=None):
+    """このPAをdistで消化した後の打撃側勝ち価値(WP表v0・design-model-v2.md①)
+    diff=指示時点の点差(打撃側−守備側)。cont(state,outs,diff)=継続評価(既定=WP表)。
+    裏9回以降は勝ち越しの瞬間に1.0(サヨナラ)"""
+    if half == "裏" and inning >= 9 and diff > 0:
+        return 1.0
+    if outs >= 3:
+        return wp_end(inning, half, diff)
+    if cont is None:
+        cont = lambda s2, o2, d2: wp_of(inning, half, d2, s2, o2)
+    walkoff = (half == "裏" and inning >= 9)
+    total = 0.0
+    for p, runs, ns, nouts in transitions(st, outs, dist, p_dp, adv):
+        d2 = diff + runs
+        if walkoff and d2 > 0:
+            total += p
+        elif nouts >= 3:
+            total += p * wp_end(inning, half, d2)
+        else:
+            total += p * cont(ns, nouts, d2)
     return total
 
 
@@ -476,6 +499,19 @@ def analyze_ph(mmdd, gid):
                 return ps_of(s2, o2, kk)
             return pc
 
+        # ── WP併記(v0): 全采配で勝ち価値差を並走計算。カードの数値は点のまま(移行期検品用) ──
+        half, diff_a = r["half"], r.get("diff") or 0
+
+        def mk_wc(dn):
+            """次打者分布dnで1打席先を読むWP継続(以降はWP表)。dn無しは表引き"""
+            if dn is None:
+                return None
+            return lambda s2, o2, d2: wp_state(inning, half, s2, o2, d2, dn)
+
+        def r2w(x):
+            """点建ての付帯項(将来コスト等)を局所の1点の勝ち価値で換算(v0線形近似)"""
+            return x * max(0.0, wp_end(inning, half, diff_a + 1) - wp_end(inning, half, diff_a))
+
         if r["kind"] == "pr":
             # ⑤代走: ΔEV(走塁) + 打順の機会費用(近似: 残りイニング×4.3打席/9スロット)
             tc_ = TEAM_NAME2CODE.get(r["team"], "")
@@ -523,6 +559,13 @@ def analyze_ph(mmdd, gid):
                 ps_s = ps_state(st, outs, d_at, k, cont=mk_pc(dist_n), p_dp=pdp0 * dm_s, adv=a_s)
                 ps_o = ps_state(st, outs, d_at, k, cont=mk_pc(dist_n), p_dp=pdp0 * dm_o, adv=a_o)
                 rec.update({"judge": f"P>={k}", "decision_prob": round(ps_s - ps_o, 3)})
+            if HAS_WP:
+                wc = mk_wc(dist_n)
+                wp_s = wp_state(inning, half, st, outs, diff_a, d_at, cont=wc,
+                                p_dp=pdp0 * dm_s, adv=a_s)
+                wp_o = wp_state(inning, half, st, outs, diff_a, d_at, cont=wc,
+                                p_dp=pdp0 * dm_o, adv=a_o)
+                rec["decision_wp"] = round(wp_s - wp_o - r2w(opp), 4)
             out.append(rec)
             continue
 
@@ -638,6 +681,21 @@ def analyze_ph(mmdd, gid):
                             "ps_stay": round(ps_chain(ds_stay, k), 3),
                             "ps_new": round(ps_chain(ds_new, k), 3)})
                 rec["decision_prob"] = round(rec["ps_stay"] - rec["ps_new"], 3)
+            if HAS_WP:
+                def wp_chain(ds):
+                    c3 = mk_wc(ds[2])
+                    c2 = (lambda s2, o2, d2, _d=ds[1], _c=c3:
+                          wp_state(inning, half, s2, o2, d2, _d, cont=_c)) \
+                        if ds[1] is not None else None
+                    return wp_state(inning, half, st, outs, diff_a, ds[0], cont=c2, adv=adv_r)
+                wpv_stay, wpv_new = wp_chain(ds_stay), wp_chain(ds_new)
+                rec["decision_wp"] = round(wpv_stay - wpv_new, 4)
+                if rec.get("one_point"):
+                    wp1_stay = wp_state(inning, half, st, outs, diff_a, ds_stay[0], adv=adv_r)
+                    wp1_new = wp_state(inning, half, st, outs, diff_a, ds_new[0], adv=adv_r)
+                    rec["decision_wp_net"] = round(wp1_stay - wp1_new - r2w(fc_new), 4)
+                else:
+                    rec["decision_wp_net"] = round(rec["decision_wp"] - r2w(fc_new), 4)
             out.append(rec)
             continue
 
@@ -680,6 +738,18 @@ def analyze_ph(mmdd, gid):
                 rec.update({"judge": f"P>={k}", "ps_pitch": round(ps_pitch, 3),
                             "ps_walk": round(ps_walk, 3),
                             "decision_prob": round(ps_pitch - ps_walk, 3)})
+            if HAS_WP:
+                wp_pitch = wp_state(inning, half, st, outs, diff_a, d_b,
+                                    cont=mk_wc(dist_n), p_dp=dp_b, adv=adv_r)
+                d_walk = diff_a + walk_runs
+                if half == "裏" and inning >= 9 and d_walk > 0:
+                    wp_walk = 1.0  # 押し出しサヨナラ
+                elif pid_n:
+                    wp_walk = wp_state(inning, half, st2, outs, d_walk, dist_n,
+                                       cont=mk_wc(d_n2), p_dp=dp_n)
+                else:
+                    wp_walk = wp_of(inning, half, d_walk, st2, outs)
+                rec["decision_wp"] = round(wp_pitch - wp_walk, 4)
             out.append(rec)
             continue
 
@@ -748,6 +818,32 @@ def analyze_ph(mmdd, gid):
                 dprob = (ps_swing - ps_b) if r["kind"] == "swing" else (ps_b - ps_swing)
                 rec.update({"judge": f"P>={k}", "ps_swing": round(ps_swing, 3),
                             "ps_bunt": round(ps_b, 3), "decision_prob": round(dprob, 3)})
+            if HAS_WP:
+                wc = mk_wc(dist_n)
+
+                def cw(s2, o2, d2):
+                    if half == "裏" and inning >= 9 and d2 > 0:
+                        return 1.0  # サヨナラ(スクイズ成功等)
+                    if o2 >= 3:
+                        return wp_end(inning, half, d2)
+                    if wc is not None:
+                        return wc(s2, o2, d2)
+                    return wp_of(inning, half, d2, s2, o2)
+
+                wp_swing = wp_state(inning, half, st, outs, diff_a, d_b, cont=wc,
+                                    p_dp=pdp, adv=adv_r)
+                if r["kind"] == "squeeze":
+                    wp_b = (bp_used["succ"] * cw(SUCC.get(rest, rest), outs + 1, diff_a + run1)
+                            + bp_used["hit"] * cw(HITST.get(rest, rest), outs, diff_a + 1)
+                            + bp_used["out3"] * cw(HITST.get(rest, rest), outs + 1, diff_a)
+                            + bp_used["fail"] * cw(st, outs + 1, diff_a))
+                else:
+                    wp_b = (bp_used["succ"] * cw(SUCC.get(st, st), outs + 1, diff_a)
+                            + bp_used["hit"] * cw(HITST.get(st, st), outs, diff_a)
+                            + bp_used["leadout"] * cw(LEADOUT.get(st, st), outs + 1, diff_a)
+                            + bp_used["fail"] * cw(st, outs + 1, diff_a))
+                rec["decision_wp"] = round((wp_swing - wp_b) if r["kind"] == "swing"
+                                           else (wp_b - wp_swing), 4)
             out.append(rec)
             continue
 
@@ -789,6 +885,15 @@ def analyze_ph(mmdd, gid):
             rec.update({"judge": f"P>={k}", "ps_orig": round(ps_or_v, 3),
                         "ps_ph": round(ps_ph_v, 3),
                         "decision_prob": round(ps_ph_v - ps_or_v, 3)})
+        if HAS_WP:
+            wc = mk_wc(dist_n)
+            wp_or_v = wp_state(inning, half, st, outs, diff_a,
+                               platoon_adjust(odds_combine(b_or, pdist), P_or["bats"], thr),
+                               cont=wc, p_dp=dp_or, adv=adv_r)
+            wp_ph_v = wp_state(inning, half, st, outs, diff_a,
+                               platoon_adjust(odds_combine(b_ph, pdist), P_ph["bats"], thr),
+                               cont=wc, p_dp=dp_ph, adv=adv_r)
+            rec["decision_wp"] = round(wp_ph_v - wp_or_v, 4)
         out.append(rec)
     return out
 
@@ -806,6 +911,9 @@ if __name__ == "__main__":
         prob_note = ""
         if "decision_prob" in r:
             prob_note = f"  [{r['judge']}判定 {r['decision_prob']:+.1%}]"
+        wpv = r.get("decision_wp_net", r.get("decision_wp"))
+        if wpv is not None:
+            prob_note += f" [WP {wpv:+.2%}]"
         if r.get("kind") == "pr":
             print(f"{r['inning']}回{r['half']} {r['team']} {r['outs']}死{r['state'] or '走者無'} 代走:{r['orig']}→{r['sub']}({r['base']}塁)")
             print(f"   走塁ゲイン {r['ev_run_gain']:+.3f} − 機会費用 {r['opp_cost']:.3f}  指示 {r['decision']:+.3f}点")

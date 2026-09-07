@@ -70,6 +70,95 @@ def ps_of(state, outs, k=1):
     return t.get("ps2", t["ps"] * 0.45)
 
 
+# ── WP表 v0(design-model-v2.md①): retableの得点分布rdから後ろ向きDPで勝ち価値を構築 ──
+# 勝ち=1・引分=0.5・負け=0(NPB: 延長12回打ち切り)。9回以降は表終了時にホームリードで即終了、
+# 裏はサヨナラ(勝ち越し=即1.0)。分布は1-8回実測の流用(9回裏の1点狙い歪みは未補正=v0近似)
+_WPM = 15          # 点差の飽和(|d|>=15は勝敗確定扱い)
+_WPTAB = {}        # (inning, half, d) -> {"st|o": V(打撃側)}
+_WPEND = {}        # (inning, half, d) -> 半回終了時のV(打撃側)
+HAS_WP = False
+
+
+def _build_wp():
+    global HAS_WP
+    if not all("rd" in (_RETAB.get(f"{s or '-'}|{o}") or {})
+               for s in ("", "1", "2", "3", "12", "13", "23", "123") for o in (0, 1, 2)):
+        return
+    states = ["", "1", "2", "3", "12", "13", "23", "123"]
+    D = {(s, o): _RETAB[f"{s or '-'}|{o}"]["rd"] for s in states for o in (0, 1, 2)}
+    start = {}  # (i, half, d) -> 半回開始時のV
+
+    def vstart(i, half, d):
+        if d >= _WPM:
+            return 1.0
+        if d <= -_WPM:
+            return 0.0
+        return start[(i, half, d)]
+
+    def end_top(i, d):
+        """表打撃側の半回終了時(d=打撃側マージン)。9回以降ホームリードなら裏なしで敗北"""
+        if i >= 9 and d < 0:
+            return 0.0
+        return 1.0 - vstart(i, "裏", -d)
+
+    def end_bottom(i, d):
+        """裏打撃側の半回終了時。勝ち越し=サヨナラ勝ち(途中終了と同値)"""
+        if d > 0:
+            return 1.0 if i >= 9 else 1.0 - vstart(i + 1, "表", -d)
+        if i >= 12:
+            return 0.5 if d == 0 else 0.0
+        if i >= 9 and d < 0:
+            return 0.0
+        return 1.0 - vstart(i + 1, "表", -d)
+
+    for i in range(12, 0, -1):
+        for half in ("裏", "表"):
+            endf = end_bottom if half == "裏" else end_top
+            for d in range(-_WPM + 1, _WPM):
+                _WPEND[(i, half, d)] = endf(i, d)
+                cell = {}
+                for s in states:
+                    for o in (0, 1, 2):
+                        cell[f"{s or '-'}|{o}"] = sum(
+                            p * endf(i, min(_WPM - 1, d + r)) for r, p in enumerate(D[(s, o)]))
+                _WPTAB[(i, half, d)] = cell
+                start[(i, half, d)] = cell["-|0"]
+    HAS_WP = True
+
+
+def _wp_clamp(inning, half, d):
+    return (min(12, max(1, inning)), half, max(-_WPM + 1, min(_WPM - 1, d)))
+
+
+def wp_end(inning, half, d):
+    """半回終了時の打撃側勝ち価値(win=1, draw=0.5)"""
+    if d >= _WPM:
+        return 1.0
+    if d <= -_WPM:
+        return 0.0
+    return _WPEND[_wp_clamp(inning, half, d)]
+
+
+def wp_of(inning, half, d, state, outs):
+    """回中(塁,アウト)からの打撃側勝ち価値。裏9回以降の勝ち越しマージンは即1.0(サヨナラ)"""
+    if half == "裏" and inning >= 9 and d > 0:
+        return 1.0
+    if outs >= 3:
+        return wp_end(inning, half, d)
+    if d >= _WPM:
+        return 1.0
+    if d <= -_WPM:
+        return 0.0
+    key = _wp_clamp(inning, half, d)
+    return _WPTAB[key][f"{state or '-'}|{outs}"]
+
+
+try:
+    _build_wp()
+except Exception:
+    HAS_WP = False
+
+
 def strip_tags(s):
     return re.sub(r"<[^>]+>", "", s).replace("&nbsp;", "").strip()
 

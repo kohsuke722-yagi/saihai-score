@@ -44,13 +44,15 @@ def main():
                     fut[i] = future
                 for pa, f in zip(pas, fut):
                     key = f"{pa['runners'] or '-'}|{pa['outs']}"
-                    a = agg.setdefault(key, [0, 0.0, 0, 0])
+                    a = agg.setdefault(key, [0, 0.0, 0, 0, [0] * 6])
                     a[0] += 1
                     a[1] += f
                     a[2] += 1 if f >= 1 else 0
                     a[3] += 1 if f >= 2 else 0
-    table = {k: {"n": n, "re": round(s / n, 4), "ps": round(c / n, 4), "ps2": round(c2 / n, 4)}
-             for k, (n, s, c, c2) in sorted(agg.items())}
+                    a[4][min(f, 5)] += 1  # 得点分布r=0..5+(WP表のDP部品・design-model-v2.md①)
+    table = {k: {"n": n, "re": round(s / n, 4), "ps": round(c / n, 4), "ps2": round(c2 / n, 4),
+                 "rd": [round(x / n, 5) for x in rc]}
+             for k, (n, s, c, c2, rc) in sorted(agg.items())}
     out = os.path.join(LOGS, "retable.json")
     with open(out, "w", encoding="utf-8") as f:
         json.dump({"games": games, "note": "1-8回のみ・当季実測", "table": table}, f,
