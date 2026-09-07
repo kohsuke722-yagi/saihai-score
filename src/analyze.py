@@ -37,11 +37,13 @@ def nrunners(state):
 
 # 当季実測RE/得点確率表(retab.py出力)。あれば縮小ブレンドで使用(2026-09-03裁定: 借り物→実測)
 _RETAB = {}
+_RETAB_DOC = {}
 try:
     with open(os.path.join(BASE_DIR, "data", "logs", "retable.json"), encoding="utf-8") as _f:
-        _RETAB = json.load(_f).get("table", {})
+        _RETAB_DOC = json.load(_f)
+    _RETAB = _RETAB_DOC.get("table", {})
 except Exception:
-    _RETAB = {}
+    _RETAB, _RETAB_DOC = {}, {}
 HAS_RETAB = bool(_RETAB)
 _K_RE = 300  # 縮小の強さ: 実測nが300打席で借り物と同じ重み(バックテスト較正予定)
 
@@ -76,16 +78,42 @@ def ps_of(state, outs, k=1):
 _WPM = 15          # 点差の飽和(|d|>=15は勝敗確定扱い)
 _WPTAB = {}        # (inning, half, d) -> {"st|o": V(打撃側)}
 _WPEND = {}        # (inning, half, d) -> 半回終了時のV(打撃側)
+_WP_CACHE = {}     # (sTop, sBottom) -> (tab, end)  WP v1環境条件付け(9/7設計)
 HAS_WP = False
 
 
-def _build_wp():
-    global HAS_WP
-    if not all("rd" in (_RETAB.get(f"{s or '-'}|{o}") or {})
-               for s in ("", "1", "2", "3", "12", "13", "23", "123") for o in (0, 1, 2)):
-        return
+def _tilt(rd, m):
+    """得点分布の指数チルト: P'(r)∝P(r)θ^r で平均をm倍へ(形状を保つスケール・WP v1)"""
+    if abs(m - 1.0) < 1e-3:
+        return rd
+    mu = sum(r * p for r, p in enumerate(rd))
+    if mu <= 0:
+        return rd
+    target = mu * m
+    lo, hi = 0.2, 5.0
+    for _ in range(40):
+        th = (lo + hi) / 2
+        w = [p * th ** r for r, p in enumerate(rd)]
+        s = sum(w)
+        mu2 = sum(r * x for r, x in enumerate(w)) / s
+        if mu2 < target:
+            lo = th
+        else:
+            hi = th
+    w = [p * th ** r for r, p in enumerate(rd)]
+    s = sum(w)
+    return [x / s for x in w]
+
+
+def _build_wp(s_top=1.0, s_bot=1.0):
+    """勝ち価値表のDP構築。s_top/s_bot=表裏それぞれの得点環境倍率(WP v1)"""
     states = ["", "1", "2", "3", "12", "13", "23", "123"]
-    D = {(s, o): _RETAB[f"{s or '-'}|{o}"]["rd"] for s in states for o in (0, 1, 2)}
+    D = {}
+    for s in states:
+        for o in (0, 1, 2):
+            base = _RETAB[f"{s or '-'}|{o}"]["rd"]
+            D[(s, o, "表")] = _tilt(base, s_top)
+            D[(s, o, "裏")] = _tilt(base, s_bot)
     start = {}  # (i, half, d) -> 半回開始時のV
 
     def vstart(i, half, d):
@@ -111,19 +139,42 @@ def _build_wp():
             return 0.0
         return 1.0 - vstart(i + 1, "表", -d)
 
+    tab, end = {}, {}
     for i in range(12, 0, -1):
         for half in ("裏", "表"):
             endf = end_bottom if half == "裏" else end_top
             for d in range(-_WPM + 1, _WPM):
-                _WPEND[(i, half, d)] = endf(i, d)
+                end[(i, half, d)] = endf(i, d)
                 cell = {}
                 for s in states:
                     for o in (0, 1, 2):
                         cell[f"{s or '-'}|{o}"] = sum(
-                            p * endf(i, min(_WPM - 1, d + r)) for r, p in enumerate(D[(s, o)]))
-                _WPTAB[(i, half, d)] = cell
+                            p * endf(i, min(_WPM - 1, d + r))
+                            for r, p in enumerate(D[(s, o, half)]))
+                tab[(i, half, d)] = cell
                 start[(i, half, d)] = cell["-|0"]
-    HAS_WP = True
+    return tab, end
+
+
+def set_wp_env(s_top=1.0, s_bot=1.0):
+    """試合の得点環境に合わせてWP表を切替(WP v1・9/7)。キャッシュ付き・単一スレッド前提"""
+    global _WPTAB, _WPEND
+    if not HAS_WP:
+        return
+    key = (round(max(0.7, min(1.3, s_top)), 2), round(max(0.7, min(1.3, s_bot)), 2))
+    if key not in _WP_CACHE:
+        _WP_CACHE[key] = _build_wp(key[0], key[1])
+    _WPTAB, _WPEND = _WP_CACHE[key]
+
+
+def env_of(att_team, def_team):
+    """攻撃側の得点環境倍率=自軍得点力×相手の失点許容(リーグ比・0.7-1.3clamp・WP v1)"""
+    te = _RETAB_DOC.get("team_env", {})
+    lg = _RETAB_DOC.get("league_rpg") or 0
+    a, dv = te.get(att_team), te.get(def_team)
+    if not a or not dv or not lg:
+        return 1.0
+    return max(0.7, min(1.3, (a["rpg"] / lg) * (dv["rapg"] / lg)))
 
 
 def _wp_clamp(inning, half, d):
@@ -154,7 +205,11 @@ def wp_of(inning, half, d, state, outs):
 
 
 try:
-    _build_wp()
+    if all("rd" in (_RETAB.get(f"{s0 or '-'}|{o0}") or {})
+           for s0 in ("", "1", "2", "3", "12", "13", "23", "123") for o0 in (0, 1, 2)):
+        _WP_CACHE[(1.0, 1.0)] = _build_wp()
+        _WPTAB, _WPEND = _WP_CACHE[(1.0, 1.0)]
+        HAS_WP = True
 except Exception:
     HAS_WP = False
 

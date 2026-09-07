@@ -23,6 +23,7 @@ LOGS = os.path.join(os.path.dirname(RAW), "logs")
 def main():
     agg = {}  # key -> [n, sum_runs, n_scored]
     games = 0
+    tenv = {}  # チーム -> [得点, 失点, 試合数](WP v1環境条件付け用・9/7)
     for mmdd, gid in iter_games():
         if True:  # 旧2重ループのインデント維持
             try:
@@ -31,6 +32,18 @@ def main():
                 print(f"skip {mmdd}/{gid}: {e}")
                 continue
             games += 1
+            pas_all = [e for e in events if e["type"] == "pa"]
+            aw = next((e["team"] for e in pas_all if e["half"] == "表"), None)
+            hm = next((e["team"] for e in pas_all if e["half"] == "裏"), None)
+            if aw and hm:
+                sc = {aw: 0, hm: 0}
+                for e in pas_all:
+                    sc[e["team"]] += e.get("runs", 0)
+                for t, o in ((aw, hm), (hm, aw)):
+                    a = tenv.setdefault(t, [0, 0, 0])
+                    a[0] += sc[t]
+                    a[1] += sc[o]
+                    a[2] += 1
             # (回,表裏)ごとに末尾からの累積得点を付けて集計
             halves = {}
             for e in events:
@@ -53,10 +66,15 @@ def main():
     table = {k: {"n": n, "re": round(s / n, 4), "ps": round(c / n, 4), "ps2": round(c2 / n, 4),
                  "rd": [round(x / n, 5) for x in rc]}
              for k, (n, s, c, c2, rc) in sorted(agg.items())}
+    lg_rpg = sum(a[0] for a in tenv.values()) / max(1, sum(a[2] for a in tenv.values()))
+    team_env = {t: {"rpg": round(a[0] / a[2], 3), "rapg": round(a[1] / a[2], 3), "g": a[2]}
+                for t, a in tenv.items() if a[2]}
     out = os.path.join(LOGS, "retable.json")
     with open(out, "w", encoding="utf-8") as f:
-        json.dump({"games": games, "note": "1-8回のみ・当季実測", "table": table}, f,
+        json.dump({"games": games, "note": "1-8回のみ・当季実測", "table": table,
+                   "team_env": team_env, "league_rpg": round(lg_rpg, 3)}, f,
                   ensure_ascii=False, indent=1)
+    print("チーム得点環境:", {t: v["rpg"] for t, v in sorted(team_env.items())})
     print(f"games={games}  states={len(table)}  saved: {out}")
     print(f"{'状態':<8}{'n':>7}{'実測RE':>8}{'借り物RE':>9}{'得点確率':>9}")
     for st in ("-", "1", "2", "3", "12", "13", "23", "123"):

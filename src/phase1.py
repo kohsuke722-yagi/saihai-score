@@ -163,9 +163,9 @@ _FULL2SHORT_T = {"読売ジャイアンツ": "巨人", "横浜DeNAベイスタ�
                  "オリックス・バファローズ": "オリックス", "東北楽天ゴールデンイーグルス": "楽天"}
 
 
-def bench_pitchers(mmdd, gid):
-    """当日ベンチ入りの投手(チーム短縮名→[選手名])。NPBのroster.html=実名簿(9/7社長指摘:
-    「登板実績からの推定」は抹消済み・ベンチ外の幻の候補を生むため実名簿を正とする)"""
+def bench_roster(mmdd, gid):
+    """当日ベンチ入り選手(roster.html実名簿・9/7導入)。returns (投手{チーム:[名]}, 野手{チーム:[名]})
+    野手側はエンジン評価④の代打候補に使う"""
     path = os.path.join(BASE, "data", "raw", mmdd, gid, "roster.html")
     html = None
     if os.path.exists(path):
@@ -176,20 +176,24 @@ def bench_pitchers(mmdd, gid):
             html = get(f"{NPB}/scores/2026/{mmdd}/{gid}/roster.html")
             save(path, html)
         except Exception:
-            return {}
+            return {}, {}
     toks = [t.strip() for t in re.split(r"<[^>]+>", html) if t.strip()]
-    out_, cur, mode = {}, None, False
+    pit_, bat_, cur, mode = {}, {}, None, None
     for t in toks:
         if t in _FULL2SHORT_T:
-            cur, mode = _FULL2SHORT_T[t], False
+            cur, mode = _FULL2SHORT_T[t], None
         elif t == "投手":
-            mode = True
+            mode = "p"
         elif t in ("捕手", "内野手", "外野手"):
-            mode = False
+            mode = "b"  # 野手ベンチ=エンジン評価④の代打候補(9/7)
         elif (mode and cur and not t.isdigit()
               and not re.fullmatch(r"[右左両]投[右左両]打", t) and len(t) <= 12):
-            out_.setdefault(cur, []).append(t)
-    return out_
+            (pit_ if mode == "p" else bat_).setdefault(cur, []).append(t)
+    return pit_, bat_
+
+
+def bench_pitchers(mmdd, gid):
+    return bench_roster(mmdd, gid)[0]
 
 
 def removed_soon(team_name, short_name, mmdd, days=3):
@@ -485,8 +489,11 @@ def analyze_ph(mmdd, gid):
     asof = mmdd
     away = next(e["team"] for e in events if e["half"] == "表")
     home = next(e["team"] for e in events if e["half"] == "裏")
+    if HAS_WP:  # WP v1(9/7設計①): この試合の得点環境(打線×相手守備)でWP表を条件付け
+        from analyze import set_wp_env, env_of
+        set_wp_env(env_of(away, home), env_of(home, away))
 
-    bench_map = bench_pitchers(mmdd, gid)  # 当日ベンチ実名簿(②-d候補の正ソース)
+    bench_map, bench_bat = bench_roster(mmdd, gid)  # 当日ベンチ実名簿(投手=②-d/野手=④の候補)
     cur_pitcher = {}
     slots = {away: {}, home: {}}
     pslot = {}  # チーム→投手の打順スロット(セ=DH無し試合のみ存在)
@@ -529,6 +536,7 @@ def analyze_ph(mmdd, gid):
                                            "day_old": list(day_pa.get(ok, [])),
                                            "at_head": half_pa.get((e["inning"], e["half"]), 0) == 0,
                                            "inning": e["inning"], "half": e["half"]})
+                    # ③相手反応: 指示時点の打順上の打者(相手が代打で応じる前)も控える(9/7設計)
                 cur_pitcher[defense] = new
                 entry_inning[f"{defense}|{new}"] = e["inning"]
                 # セ: 新投手は退いた投手(または代打済み枠)の打順スロットに入る(9/7監査#8)。
@@ -562,7 +570,7 @@ def analyze_ph(mmdd, gid):
         while pending_change:
             pc_ = pending_change.pop(0)
             results.append({**pc_, "team": team, "outs": e["outs"], "state": e["runners"],
-                            "batter": e["batter"], "next": nxt,
+                            "batter": e["batter"], "due": slots[team].get(s), "next": nxt,
                             "next2": slots[team].get((s + 2) % 9), "diff": diff,
                             "bases": e.get("bases"), "pitcher": None})
         if cur_half_key != (e["inning"], e["half"]):
@@ -611,6 +619,13 @@ def analyze_ph(mmdd, gid):
                             "outs": e["outs"], "state": e["runners"], "batter": bat,
                             "diff": diff, "next": nxt, "bases": e.get("bases"),
                             "pitcher": cur_pitcher.get(defense)})
+        if (e["inning"] >= 7 and abs(diff) <= 3 and not bat.startswith("代打")
+                and bench_bat.get(team)):
+            # ④エンジン評価v1(9/7): 代打を出さなかった打席の見逃しスキャン対象(終盤接戦のみ)
+            results.append({"kind": "ph_scan", "inning": e["inning"], "half": e["half"],
+                            "team": team, "outs": e["outs"], "state": e["runners"],
+                            "batter": bat, "diff": diff, "next": nxt,
+                            "bases": e.get("bases"), "pitcher": cur_pitcher.get(defense)})
         if any(kw in res for kw in REACH):
             reached.add(bat.replace("代打・", "").strip())
         if bat.startswith("代打"):
@@ -746,6 +761,45 @@ def analyze_ph(mmdd, gid):
             out.append(rec)
             continue
 
+        if r["kind"] == "ph_scan":
+            # ④エンジン評価v1(9/7): 「代打を出さなかった」見逃し幅。損失1%以上のみ記録・カード外
+            if not HAS_WP:
+                continue
+            pid_b = pid_of(r["team"], r["batter"])
+            if not pid_b:
+                continue
+            P_b = fetch_player(pid_b)
+            d_b = full(P_b, pid_b)
+            dp_b = dp_prob(pid_b, P_b, pid_pi, asof) * dpm_r
+            wc4 = mk_wc(dist_n)
+            wp_act = wp_state(inning, half, st, outs, diff_a, d_b, cont=wc4, p_dp=dp_b, adv=adv_r)
+            used_nm = {x.get("ph") for x in results if x.get("kind") == "ph"
+                       and (x["inning"], x["half"]) <= (inning, half)}
+            used_nm |= {x.get("sub") for x in results if x.get("kind") == "pr"
+                        and (x["inning"], x["half"]) <= (inning, half)}
+            tc4 = TEAM_NAME2CODE.get(r["team"], "")
+            best_wp = best_nm = None
+            for nm in (bench_bat.get(r["team"]) or [])[:12]:
+                if nm in used_nm:
+                    continue
+                n0 = _norm_name(nm)
+                hits = [p for p, dd in _HAND.items() if dd.get("team") == tc4
+                        and _norm_name(dd.get("name", "")).startswith(n0)]
+                pid_c = hits[0] if len(hits) == 1 else None
+                if not pid_c or pid_c == pid_b:
+                    continue
+                P_c = fetch_player(pid_c)
+                d_c = full(P_c, pid_c)
+                wp_c = wp_state(inning, half, st, outs, diff_a, d_c, cont=wc4,
+                                p_dp=dp_prob(pid_c, P_c, pid_pi, asof) * dpm_r, adv=adv_r)
+                if best_wp is None or wp_c > best_wp:
+                    best_wp, best_nm = wp_c, nm
+            if best_wp is not None and best_wp - wp_act >= 0.010:
+                out.append({**r, "judge": "none", "decision": None, "engine": "ph_miss",
+                            "engine_loss_wp": round(best_wp - wp_act, 4),
+                            "engine_best": best_nm})
+            continue
+
         if r["kind"] == "relief":
             # ②-a 対戦打者0人での交代は規則上ほぼ負傷・退場のみ=采配でない→採点対象外
             #   (design-model-v2.md。打席完了後の負傷交代は公示後追い=Layer2で対応)
@@ -859,6 +913,8 @@ def analyze_ph(mmdd, gid):
                 r["day_bf"] = len(day)
             if r.get("old_entry", 1) > 1:  # 続投リリーフにも負荷補正(9/7監査#9: 新投手側との非対称解消)
                 pd_old = ob_mult(pd_old, load_mult(pid_old, asof)[0])
+                if r["inning"] > r.get("old_entry", 1):  # 回またぎ劣化(実測1.022・監査で未適用と判明)
+                    pd_old = ob_mult(pd_old, PCTX.get("cross", 1.0))
             streak = rest_streak(pid_new, asof)
             lm_new, n5_new, n30_new = load_mult(pid_new, asof)
             pd_new_adj = ob_mult(pd_new, lm_new)  # 性能補正=負荷2軸(連投streakは可用性・バッジ用)
@@ -1209,6 +1265,11 @@ if __name__ == "__main__":
         wpv = r.get("decision_wp_net", r.get("decision_wp"))
         if wpv is not None:
             prob_note += f" [WP {wpv:+.2%}]"
+        if r.get("kind") == "ph_scan":
+            if r.get("engine_loss_wp"):
+                print(f"{r['inning']}回{r['half']} {r['team']} {r['outs']}死{r['state'] or '走者無'} "
+                      f"見逃し代打: {r['batter']}のまま(最善:代打{r['engine_best']}) 損失 -{r['engine_loss_wp']:.2%}")
+            continue
         if r.get("kind") == "pr":
             print(f"{r['inning']}回{r['half']} {r['team']} {r['outs']}死{r['state'] or '走者無'} 代走:{r['orig']}→{r['sub']}({r['base']}塁)")
             print(f"   走塁ゲイン {r['ev_run_gain']:+.3f} − 機会費用 {r['opp_cost']:.3f}  指示 {r['decision']:+.3f}点")
