@@ -57,7 +57,8 @@ def main():
     # 層別(同一投手内)集計: 「良い投手ほど3巡目まで投げる/連投させられる」選択バイアスを除去
     tto_p = {}    # pid -> {bucket: [ob, n]} 先発のみ
     rest_p = {}   # pid -> {bucket: [ob, n]} リリーフのみ
-    load_p = {}   # pid -> {b01/b2p: [ob, n]} 直近5日の登板数(累積負荷・9/7社長指摘)
+    # 負荷2軸(9/7社長指摘): 短期=直近5日2登板+ / 長期=チーム直近30試合12登板+ の4バケット
+    load_p = {}   # pid -> {base/burst/heavy/both: [ob, n]}
     cross_p = {}  # pid -> {in1/inx: [ob, n]} リリーフの回またぎ
     appearances = {}
 
@@ -69,6 +70,8 @@ def main():
             by_date.setdefault(mmdd, []).append((cls, inning))
         dates = sorted(by_date, key=d_of)
         appearances[pid] = dates
+        td_p = sorted(team_dates.get(hand.get(pid, {}).get("team", ""), ()), key=d_of)
+        aset = set(dates)
         for i, mmdd in enumerate(dates):
             clss = by_date[mmdd]
             is_starter = clss[0][1] == 1
@@ -87,6 +90,8 @@ def main():
             entry_inn = clss[0][1]
             n5 = sum(1 for k5 in range(1, 6)
                      if (d - datetime.timedelta(days=k5)) in prev)
+            prior30 = [g for g in td_p if g < mmdd][-30:]
+            n30 = sum(1 for g in prior30 if g in aset) if len(prior30) >= 30 else 0
             for j, (cls, inn) in enumerate(clss):
                 if cls == "SH":
                     continue
@@ -101,7 +106,8 @@ def main():
                     rest_p.setdefault(pid, {}).setdefault(k, [0, 0])
                     rest_p[pid][k][0] += ob
                     rest_p[pid][k][1] += 1
-                    bl = "b2p" if n5 >= 2 else "b01"
+                    bl = ("base", "burst", "heavy", "both")[(1 if n5 >= 2 else 0)
+                                                           + (2 if n30 >= 12 else 0)]
                     load_p.setdefault(pid, {}).setdefault(bl, [0, 0])
                     load_p[pid][bl][0] += ob
                     load_p[pid][bl][1] += 1
@@ -150,10 +156,11 @@ def main():
         out["rest"][k] = round(m, 4)
         r, n = pooled(rest_p, k)
         print(f"  {label}: 被出塁{r:.3f} (n={n}) 乗数{m:.3f}")
-    out["load"] = {"b01": 1.0}
-    print("累積負荷(リリーフ・直近5日の登板数・同一投手内MH・基準=0-1登板):")
-    for k, label in (("b01", "0-1登板"), ("b2p", "2登板以上")):
-        m, nb = (1.0, pooled(load_p, k)[1]) if k == "b01" else mh_or(load_p, k, "b01")
+    out["load"] = {"base": 1.0}
+    print("負荷2軸(リリーフ・同一投手内MH・基準=短期長期とも低):")
+    for k, label in (("base", "基準"), ("burst", "短期高(5日2登板+)"),
+                     ("heavy", "長期高(30試合12登板+)"), ("both", "両方高")):
+        m, nb = (1.0, pooled(load_p, k)[1]) if k == "base" else mh_or(load_p, k, "base")
         out["load"][k] = round(m, 4)
         r, n = pooled(load_p, k)
         print(f"  {label}: 被出塁{r:.3f} (n={n}) 乗数{m:.3f}")

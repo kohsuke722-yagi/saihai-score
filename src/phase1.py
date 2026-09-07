@@ -130,13 +130,17 @@ def rest_streak(pid, asof):
 
 
 def load_mult(pid, asof):
-    """累積負荷乗数(9/7社長指摘・実測: 直近5日2登板以上は同一投手内で被出塁オッズ約+9%)。
-    連投streakより説明力が大きいため性能補正はこちらを使う。returns (乗数, 直近5日登板数)"""
+    """負荷乗数2軸(9/7社長指摘・実測MH: 短期高+10.6%/長期高+10.7%/両方+12.4%)。
+    短期=直近5日2登板+/長期=チーム直近30試合12登板+。returns (乗数, n5, n30)"""
     import datetime as _dt
-    dates = set(PCTX.get("appearances", {}).get(pid, []))
+    dset = set(PCTX.get("appearances", {}).get(pid, []))
     d = _dt.date(2026, int(asof[:2]), int(asof[2:]))
-    n5 = sum(1 for k in range(1, 6) if (d - _dt.timedelta(days=k)).strftime("%m%d") in dates)
-    return PCTX.get("load", {}).get("b2p" if n5 >= 2 else "b01", 1.0), n5
+    n5 = sum(1 for k in range(1, 6) if (d - _dt.timedelta(days=k)).strftime("%m%d") in dset)
+    tc = _HAND.get(pid, {}).get("team", "")
+    prior = [g for g in PCTX.get("team_dates", {}).get(tc, []) if g < asof][-30:]
+    n30 = sum(1 for g in prior if g in dset) if len(prior) >= 30 else 0
+    key = ("base", "burst", "heavy", "both")[(1 if n5 >= 2 else 0) + (2 if n30 >= 12 else 0)]
+    return PCTX.get("load", {}).get(key, 1.0), n5, n30
 
 
 def _has_game_tomorrow(team_name, asof):
@@ -808,8 +812,8 @@ def analyze_ph(mmdd, gid):
                           for k2 in set(pd_old) | set(cnt)}
                 r["day_bf"] = len(day)
             streak = rest_streak(pid_new, asof)
-            lm_new, n5_new = load_mult(pid_new, asof)
-            pd_new_adj = ob_mult(pd_new, lm_new)  # 性能補正=累積負荷(連投streakは可用性・バッジ用)
+            lm_new, n5_new, n30_new = load_mult(pid_new, asof)
+            pd_new_adj = ob_mult(pd_new, lm_new)  # 性能補正=負荷2軸(連投streakは可用性・バッジ用)
             bf0 = r.get("bf_old", 0)
 
             def ps_chain(ds, kk):
@@ -851,7 +855,7 @@ def analyze_ph(mmdd, gid):
             ev1_new = ev_state(st, outs, ds_new[0], adv=adv_r)
             fc_new = future_cost(pd_new, streak, r["def_team"], asof)
             rec = {**r, "judge": "RE", "streak_new": streak, "load5_new": n5_new,
-                   "tto_old": min(3, bf0 // 9 + 1),
+                   "load30_new": n30_new, "tto_old": min(3, bf0 // 9 + 1),
                    "old_throws": P_old.get("throws", "右"), "new_throws": P_new.get("throws", "右"),
                    "ev_stay": round(ev_stay, 3), "ev_new": round(ev_new, 3),
                    "future_cost_new": round(fc_new, 3),
