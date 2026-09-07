@@ -527,6 +527,12 @@ def analyze_ph(mmdd, gid):
             continue
 
         if r["kind"] == "relief":
+            # ②-a 対戦打者0人での交代は規則上ほぼ負傷・退場のみ=采配でない→採点対象外
+            #   (design-model-v2.md。打席完了後の負傷交代は公示後追い=Layer2で対応)
+            if r.get("bf_old", 0) == 0:
+                out.append({**r, "judge": "none", "decision": None, "accident": True,
+                            "note": "1打者未満で降板=負傷・アクシデント交代(採点対象外)"})
+                continue
             # ⑨継投。回頭のリリーフ交代は記録のみ(9/3裁定: 続投は選択肢外)
             if r.get("old_entry", 1) > 1 and r.get("at_head"):
                 rec0 = {**r, "judge": "none", "decision": None,

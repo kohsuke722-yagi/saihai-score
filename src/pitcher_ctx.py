@@ -60,6 +60,7 @@ def main():
     cross_p = {}  # pid -> {in1/inx: [ob, n]} リリーフの回またぎ
     appearances = {}
 
+    eo = {"start": {}, "relief": {}}  # 1登板あたり奪アウト数(②-bロングリリーフ設計の部品)
     for pid, rows in pitchers.items():
         by_date = {}
         for mmdd, cls, inning, st, outs in rows:
@@ -69,6 +70,10 @@ def main():
         for i, mmdd in enumerate(dates):
             clss = by_date[mmdd]
             is_starter = clss[0][1] == 1
+            outs_day = sum((2 if c == "DP" else 1) for c, _ in clss if c not in ONBASE)
+            acc = eo["start" if is_starter else "relief"].setdefault(pid, [0, 0])
+            acc[0] += outs_day
+            acc[1] += 1
             # 連投streak: 昨日から遡って連続登板日数
             streak = 0
             d = d_of(mmdd)
@@ -172,6 +177,13 @@ def main():
             avail[b][0] += 1 if d1 in pitched else 0
             avail[b][1] += 1
     tot_ra = sum(relief_avg.values())
+    out["e_outs"] = {role: {pid: round(v[0] / v[1], 2) for pid, v in d.items() if v[1]}
+                     for role, d in eo.items()}
+    r_all = [v for v in eo["relief"].values() if v[1]]
+    out["e_outs"]["relief_mean"] = round(sum(v[0] for v in r_all) / sum(v[1] for v in r_all), 2) \
+        if r_all else 3.0
+    print(f"期待アウト数/登板: リリーフ平均{out['e_outs']['relief_mean']}"
+          f" (先発{len(out['e_outs']['start'])}人・救援{len(out['e_outs']['relief'])}人分を保存)")
     out["avail"] = {b: {"p": round(rate(v), 4), "n": v[1]} for b, v in sorted(avail.items())
                     if b in ("0", "1", "2")}
     out["relief_avg"] = {k: round(v / tot_ra, 5) for k, v in relief_avg.items()}
