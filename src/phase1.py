@@ -184,11 +184,18 @@ def bench_roster(mmdd, gid):
             cur, mode = _FULL2SHORT_T[t], None
         elif t == "投手":
             mode = "p"
-        elif t in ("捕手", "内野手", "外野手"):
-            mode = "b"  # 野手ベンチ=エンジン評価④の代打候補(9/7)
+        elif t == "捕手":
+            mode = "b捕"
+        elif t == "内野手":
+            mode = "b内"
+        elif t == "外野手":
+            mode = "b外"  # 野手はポジ群つきで保持(ベストメンバー探索の同ポジ制約・9/8)
         elif (mode and cur and not t.isdigit()
               and not re.fullmatch(r"[右左両]投[右左両]打", t) and len(t) <= 12):
-            (pit_ if mode == "p" else bat_).setdefault(cur, []).append(t)
+            if mode == "p":
+                pit_.setdefault(cur, []).append(t)
+            else:
+                bat_.setdefault(cur, []).append((t, mode[1]))  # (名前, ポジ群: 捕/内/外)
     return pit_, bat_
 
 
@@ -789,7 +796,7 @@ def analyze_ph(mmdd, gid):
             now_ho = (inning, 0 if half == "表" else 1)
             tc4 = TEAM_NAME2CODE.get(r["team"], "")
             best_wp = best_nm = None
-            for nm in (bench_bat.get(r["team"]) or [])[:12]:
+            for nm, _pg in (bench_bat.get(r["team"]) or [])[:12]:
                 n0 = _norm_name(nm)
                 hits = [p for p, dd in _HAND.items() if dd.get("team") == tc4
                         and _norm_name(dd.get("name", "")).startswith(n0)]

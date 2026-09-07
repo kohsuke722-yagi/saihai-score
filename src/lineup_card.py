@@ -51,6 +51,17 @@ def insights(r):
     return out
 
 
+POSCHR = {"捕": "捕", "一": "一", "二": "二", "三": "三", "遊": "遊",
+          "左": "左", "中": "中", "右": "右", "指": "DH", "投": "投"}
+
+
+def pos_of(role):
+    for ch in role or "":
+        if ch in POSCHR:
+            return POSCHR[ch]
+    return ""
+
+
 def team_panel(r, meta_side):
     t = TEAMS.get(r["team"], {})
     col = t.get("color", "#333")
@@ -59,37 +70,52 @@ def team_panel(r, meta_side):
         badge = '<span class="badge ok">✓ ほぼ最適の並び</span>'
     else:
         badge = f'<span class="badge amber">並び替え余地 {diff:+.2f}点</span>'
-    mx_solo = max(p["solo"] for p in r["players"]) or 1
+    field = [p for p in r["players"] if "投" not in p["role"]]
+    mx_solo = max(p["solo"] for p in field) or 1
+    star_pid = max(field, key=lambda p: p["solo"])["pid"]
     rows = []
     for p in r["players"]:
         is_p = "投" in p["role"]
         w = max(4, p["solo"] / mx_solo * 100)
         bchip = {"左": "l", "右": "r", "両": "s"}.get(p["bats"], "r")
+        star = '<span class="star">★</span>' if p["pid"] == star_pid else ""
         rows.append(f'''
       <div class="prow">
         <div class="slot">{p["slot"]}</div>
-        <div class="pn">{p["name"]}<span class="role">{p["role"]}</span></div>
+        <div class="pn">{p["name"]}{star}<span class="role">{pos_of(p["role"])}</span></div>
         <div class="hand {bchip}">{p["bats"]}</div>
         <div class="pbar"><div class="pfill" style="width:{w:.0f}%;background:linear-gradient(90deg,{col},{col}88)"></div></div>
         <div class="pv">{'―' if is_p else f'{p["solo"]:.1f}'}</div>
       </div>''')
     ins = "".join(f'<div class="ins {c}">{txt}</div>' for c, txt in insights(r))
-    bench = ""
-    if r.get("bench_best"):
-        bench = (f'<div class="bench">💡 ベンチ最強打者: <b>{r["bench_best"][0]}</b>'
-                 f'(打力換算 {r["bench_best"][1]:.1f}点/試合)</div>')
+    # EVラダー: 今日の並び → 並べ替え → ベストメンバー(同ポジ制約・IN選手のみ実名)
+    ev_a, ev_b, ev_m = r["ev_actual"], r["ev_best"], r.get("ev_bestmem")
+    steps = [f'<div class="lstep"><div class="lk">今日の並び</div><div class="lv">{ev_a:.2f}</div></div>',
+             f'<div class="larr">→</div>',
+             f'<div class="lstep"><div class="lk">並べ替え最適</div><div class="lv">{ev_b:.2f}'
+             f'<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div></div>']
+    if ev_m:
+        inn = "・".join(r.get("bestmem_in") or [])
+        steps += [f'<div class="larr">→</div>',
+                  f'<div class="lstep gold"><div class="lk">ベストメンバー</div><div class="lv">{ev_m:.2f}'
+                  f'<span class="lg2">+{ev_m - ev_a:.2f}</span></div>'
+                  f'<div class="lin">{inn} IN</div></div>']
+    else:
+        steps += [f'<div class="larr">→</div>',
+                  f'<div class="lstep gold"><div class="lk">ベストメンバー</div>'
+                  f'<div class="lv" style="font-size:15px;padding-top:6px">現メンバーがベスト</div></div>']
+    ladder = f'<div class="ladder">{"".join(steps)}</div>'
     return f'''
   <div class="panel">
     <div class="phead">{medal(r["team"])}
       <div><div class="ptm" style="color:{col}">{r["team"]}</div>{badge}</div>
       <div class="pev"><div class="pevl">この並びの得点期待値</div>
-        <div class="pevv">{r["ev_actual"]:.2f}<span class="unit">点/試合</span></div>
-        <div class="pevb">同じ9人の最適並び {r["ev_best"]:.2f}点</div></div>
+        <div class="pevv">{r["ev_actual"]:.2f}<span class="unit">点/試合</span></div></div>
     </div>
-    <div class="phdr"><span>打順</span><span style="margin-left:118px">左右</span><span style="margin-left:36px">打力(点/試合換算)</span></div>
+    <div class="phdr"><span>打順</span><span style="margin-left:126px">左右</span><span style="margin-left:36px">打力(点/試合換算)</span></div>
     {"".join(rows)}
+    {ladder}
     {ins}
-    {bench}
   </div>'''
 
 
@@ -168,8 +194,9 @@ def build(mmdd, gid, png=False):
   .prow {{ display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f0f3f9; }}
   .slot {{ width:26px; height:26px; border-radius:8px; background:#f0f3f9; color:#46557a; flex:none;
           font-size:14px; font-weight:900; display:flex; align-items:center; justify-content:center; }}
-  .pn {{ width:118px; flex:none; font-size:16.5px; font-weight:900; white-space:nowrap; }}
-  .role {{ color:#9fadcc; font-size:10.5px; font-weight:700; margin-left:4px; }}
+  .pn {{ width:126px; flex:none; font-size:17.5px; font-weight:900; white-space:nowrap; }}
+  .role {{ color:#9fadcc; font-size:11px; font-weight:800; margin-left:5px; }}
+  .star {{ color:#e0a90f; font-size:13px; margin-left:2px; text-shadow:0 0 8px rgba(245,197,24,.8); }}
   .hand {{ width:26px; height:20px; border-radius:6px; flex:none; font-size:11.5px; font-weight:900;
           display:flex; align-items:center; justify-content:center; }}
   .hand.l {{ background:rgba(221,61,53,.1); color:#b8302a; }}
@@ -178,6 +205,16 @@ def build(mmdd, gid, png=False):
   .pbar {{ flex:1; height:12px; background:#f0f3f9; border-radius:6px; overflow:hidden; }}
   .pfill {{ height:100%; border-radius:6px; box-shadow:0 0 8px rgba(22,33,60,.15); }}
   .pv {{ width:36px; flex:none; text-align:right; font-size:14px; font-weight:900; color:#2c3a5c; }}
+  .ladder {{ display:flex; align-items:stretch; gap:8px; margin:12px 0 4px; }}
+  .lstep {{ flex:1; background:#f7f9fd; border:1.5px solid #e6ebf4; border-radius:12px;
+           padding:8px 10px; text-align:center; }}
+  .lstep.gold {{ background:rgba(245,197,24,.08); border-color:rgba(224,169,15,.5);
+                box-shadow:0 0 14px rgba(245,197,24,.25); }}
+  .lk {{ font-size:11px; font-weight:900; color:#66718c; letter-spacing:1px; }}
+  .lv {{ font-size:22px; font-weight:900; color:#16213c; }}
+  .lg2 {{ font-size:12px; font-weight:900; color:#0d9e55; margin-left:4px; }}
+  .lin {{ font-size:11.5px; font-weight:900; color:#9a7208; margin-top:2px; }}
+  .larr {{ align-self:center; color:#9fadcc; font-size:18px; font-weight:900; }}
   .ins {{ margin-top:7px; border-radius:10px; padding:7px 12px; font-size:13px; font-weight:800; }}
   .ins.good {{ background:rgba(13,158,85,.08); color:#0a7f45; }}
   .ins.warn {{ background:rgba(221,61,53,.08); color:#b8302a; }}
@@ -209,8 +246,8 @@ def build(mmdd, gid, png=False):
   <div class="cols">{team_panel(res[0], "away")}{team_panel(res[1], "home")}</div>
   {versus(res)}
   <div class="note">得点期待値=9イニング・中立環境換算(相手投手の質は含みません)。打力=その打者9人が並んだ場合の
-  点/試合換算。「並び替え余地」は同じ9人の並べ替えのみで、選手起用の良し悪しは評価していません。
-  僅差は誤差の範囲です。計算方法はnoteで全公開。</div>
+  点/試合換算。ベストメンバーは同ポジション群(捕手/内野/外野)内の入替のみの参考値で、守備力・休養・疲労は
+  考慮していません。僅差は誤差の範囲です。計算方法はnoteで全公開。</div>
   <div class="foot">@saihaiscore_lab(β試験運用)| 計算方法はnoteで全公開 | データ: NPB公式記録より自動集計</div>
 </div>
 </body></html>'''

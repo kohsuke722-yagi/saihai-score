@@ -171,8 +171,8 @@ def analyze_lineup(mmdd, gid):
         # ベンチ注記: スタメン野手最弱よりsolo EVが高いベンチ野手(上位1名)
         tc = TEAM_NAME2CODE.get(tm, "")
         starters_pid = {p["pid"] for p in players}
-        bench_best = None
-        for nm in (bench_bat.get(tm) or []):
+        cands, bench_best = [], None
+        for nm, grp in (bench_bat.get(tm) or []):
             n0 = _norm_name(nm)
             hits = [p for p, dd in _HAND.items() if dd.get("team") == tc
                     and _norm_name(dd.get("name", "")).startswith(n0)]
@@ -182,21 +182,60 @@ def analyze_lineup(mmdd, gid):
             P = fetch_player(pid)
             if is_pitcher_bat(P) or not (P.get("bat") and P["bat"].get("PA", 0) >= 60):
                 continue
-            solo = game_ev([batter_dist2(pid, P, mmdd)] * 9)
+            dc = batter_dist2(pid, P, mmdd)
+            solo = game_ev([dc] * 9)
+            cands.append((nm, grp, pid, dc, solo))
             if bench_best is None or solo > bench_best[1]:
                 bench_best = (nm, solo)
-        field_min = min((p for p in players if p["slot"] - 1 != fixed),
-                        key=lambda p: p["solo"])
-        note = None
-        if bench_best and bench_best[1] > field_min["solo"] + 0.3:
-            note = (f"ベンチの{bench_best[0]}(打力換算{bench_best[1]:.1f}点/試合)が"
-                    f"スタメン{field_min['name']}({field_min['solo']:.1f})を上回る")
+
+        # ベストメンバー探索(9/8社長要望): 同ポジ群(捕/内/外)内の入替のみ・最大2枚・
+        # 貪欲(1枚ずつ最良)→最終並べ替え。守備力・休養・疲労は考慮外の参考値(設計書7節)
+        def pos_group(role):
+            for ch in role or "":
+                if ch == "捕":
+                    return "捕"
+                if ch in "一二三遊":
+                    return "内"
+                if ch in "左中右":
+                    return "外"
+                if ch == "指":
+                    return "指"
+                if ch == "投":
+                    return "投"
+            return "内"
+        cur_d = list(dists)
+        swaps_in, used_b = [], set()
+        for _ in range(2):
+            base_ev0 = game_ev(cur_d)
+            best_gain, best_swap = 0.05, None  # 微差の入替提案はしない
+            for si, p in enumerate(players):
+                g = pos_group(p["role"])
+                if g == "投":
+                    continue
+                for nm, grp, pidc, dc, solo in cands:
+                    if nm in used_b or (g != "指" and grp != g):
+                        continue
+                    trial = list(cur_d)
+                    trial[si] = dc
+                    gain = game_ev(trial) - base_ev0
+                    if gain > best_gain:
+                        best_gain, best_swap = gain, (si, nm, grp, dc)
+            if not best_swap:
+                break
+            si, nm, grp, dc = best_swap
+            cur_d[si] = dc
+            used_b.add(nm)
+            swaps_in.append((nm, {"捕": "捕手", "内": "内野", "外": "外野"}.get(grp, grp)))
+        ev_bm = None
+        if swaps_in:
+            _, ev_bm = optimize(cur_d, fixed=fixed, restarts=1)
         out.append({"team": tm, "players": players, "fixed": fixed,
                     "ev_actual": round(ev_act, 3), "ev_best": round(ev_best, 3),
                     "diff": round(ev_act - ev_best, 3),
                     "best_order": [players[i]["name"] for i in best],
-                    "bench_best": list(bench_best) if bench_best else None,
-                    "bench_note": note})
+                    "ev_bestmem": round(ev_bm, 3) if ev_bm else None,
+                    "bestmem_in": [f"{nm}({g})" for nm, g in swaps_in],
+                    "bench_best": list(bench_best) if bench_best else None})
     return out
 
 
@@ -210,8 +249,8 @@ def main():
         act = "".join(f"{p['slot']}{p['name']} " for p in r["players"])
         print(f"   実際: {act}")
         print(f"   最適: {' '.join(f'{i+1}{nm}' for i, nm in enumerate(r['best_order']))}")
-        if r["bench_note"]:
-            print(f"   注記: {r['bench_note']}")
+        if r.get("ev_bestmem"):
+            print(f"   ベストメンバー(同ポジ制約): {'+'.join(r['bestmem_in'])}IN → {r['ev_bestmem']:.2f}点")
     outp = os.path.join(BASE, "data", "out", mmdd, f"lineup_{gid}.json")
     os.makedirs(os.path.dirname(outp), exist_ok=True)
     json.dump(res, open(outp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
