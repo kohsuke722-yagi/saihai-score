@@ -159,8 +159,10 @@ def analyze_lineup(mmdd, gid):
                 fixed = s0
             else:
                 d = batter_dist2(pid, P, mmdd)
-            players.append({"slot": s0 + 1, "name": nm, "role": role,
-                            "pid": pid, "solo": round(game_ev([d] * 9), 2)})
+            obp = sum(d.get(k, 0.0) for k in ("BB", "HBP", "1B", "2B", "3B", "HR"))
+            players.append({"slot": s0 + 1, "name": nm, "role": role, "pid": pid,
+                            "bats": P.get("bats", "右"), "obp": round(obp, 3),
+                            "solo": round(game_ev([d] * 9), 2)})
             dists.append(d)
         if not ok or len(dists) != 9:
             continue
@@ -193,6 +195,7 @@ def analyze_lineup(mmdd, gid):
                     "ev_actual": round(ev_act, 3), "ev_best": round(ev_best, 3),
                     "diff": round(ev_act - ev_best, 3),
                     "best_order": [players[i]["name"] for i in best],
+                    "bench_best": list(bench_best) if bench_best else None,
                     "bench_note": note})
     return out
 
