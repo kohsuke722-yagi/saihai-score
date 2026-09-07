@@ -60,6 +60,35 @@ def parse_box_subs(mmdd, gid):
     return subs
 
 
+def parse_box_lineup(mmdd, gid):
+    """box.htmlのスタメン打順 [先攻9枠, 後攻9枠](枠=slot0-8→(守備役割, 名前))。
+    無ければNone(9/7監査#8: 打順スロットの初期化と投手スロット特定に使用)"""
+    path = os.path.join(RAW, mmdd, gid, "box.html")
+    if not os.path.exists(path):
+        return None
+    html = open(path, encoding="utf-8").read()
+    tables, cur = [], {}
+    last_slot = 0
+    for tr in re.findall(r"(?s)<tr>(.*?)</tr>", html):
+        cells = [re.sub(r"<[^>]+>|&nbsp;", "", c).strip()
+                 for c in re.findall(r"(?s)<td[^>]*>(.*?)</td>", tr)]
+        if len(cells) < 4:
+            continue
+        c0, role, name = cells[0], cells[1].strip("（）()"), cells[2]
+        if not c0.isdigit() or not name or "チーム" in name:
+            continue
+        s = int(c0)
+        if s == 1 and last_slot >= 5:  # 打順1に戻った=次チームの表
+            tables.append(cur)
+            cur = {}
+        if 1 <= s <= 9 and (s - 1) not in cur:
+            cur[s - 1] = (role, name)
+        last_slot = s
+    if cur:
+        tables.append(cur)
+    return tables[:2] if len(tables) >= 2 else None
+
+
 def _occ(bases):
     return "".join(b for b in "123" if bases[b] is not None or bases[b] == "?")
 

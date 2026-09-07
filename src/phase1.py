@@ -15,7 +15,7 @@ import sys, os, re, json
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analyze import RE, re_of, ps_of, HAS_RETAB, wp_of, wp_end, HAS_WP  # noqa
-from runners import annotate, parse_box_subs, REACH  # noqa
+from runners import annotate, parse_box_subs, parse_box_lineup, REACH  # noqa
 from stats import fetch_player, odds_combine, platoon_adjust, LEAGUE  # noqa
 from stats2 import batter_dist2, pitcher_dist2, effective_n, league_meta, dp_prob  # noqa
 from palog import classify  # noqa (A-3: 当日の被打結果の分類に使用)
@@ -489,6 +489,14 @@ def analyze_ph(mmdd, gid):
     bench_map = bench_pitchers(mmdd, gid)  # 当日ベンチ実名簿(②-d候補の正ソース)
     cur_pitcher = {}
     slots = {away: {}, home: {}}
+    pslot = {}  # チーム→投手の打順スロット(セ=DH無し試合のみ存在)
+    lineup = parse_box_lineup(mmdd, gid)  # スタメンで初期化(9/7監査#8: 一巡目の代打error解消)
+    if lineup:
+        for tm, lu in ((away, lineup[0]), (home, lineup[1])):
+            for s0, (role, nm) in lu.items():
+                slots[tm][s0] = nm
+                if "投" in role:
+                    pslot[tm] = s0
     seq = {away: 0, home: 0}
     score = {away: 0, home: 0}
     bf = {}               # 投手名→この試合の対戦打者数(巡目計算用)
@@ -523,6 +531,10 @@ def analyze_ph(mmdd, gid):
                                            "inning": e["inning"], "half": e["half"]})
                 cur_pitcher[defense] = new
                 entry_inning[f"{defense}|{new}"] = e["inning"]
+                # セ: 新投手は退いた投手(または代打済み枠)の打順スロットに入る(9/7監査#8)。
+                # ダブルスイッチは検出不能のため同枠仮定(NPBでは稀・注記)
+                if defense in pslot:
+                    slots[defense][pslot[defense]] = new
             continue
         if e["type"] != "pa":
             continue
@@ -877,7 +889,8 @@ def analyze_ph(mmdd, gid):
             if ev_stay is None or ev_new is None:
                 out.append({**r, "error": "先頭打者ID不明"})
                 continue
-            # 暴投リスク(投手別実測率×全走者1進塁の価値×約3打者)※率はスポナビ蓄積で本稼働
+            # 暴投項(9/7監査#12で判明: 現行測定は振り逃げ付随分のみ=真の暴投率の約1/10で
+            # 実質無効。スポナビ球数蓄積で本稼働するまで名目上の項。「織り込み済み」とは言わない)
             _ADV1 = {"": ("", 0), "1": ("2", 0), "2": ("3", 0), "3": ("", 1), "12": ("23", 0),
                      "13": ("2", 1), "23": ("3", 1), "123": ("23", 1)}
             def wp_term(pid_x):
@@ -938,13 +951,29 @@ def analyze_ph(mmdd, gid):
             r1, r2, r3 = ("1" in st), ("2" in st), ("3" in st)
             walk_runs = 1 if (r1 and r2 and r3) else 0
             st2 = "1" + ("2" if (r2 or r1) else "") + ("3" if (r3 or (r1 and r2)) else "")
+            # 歩かせ枝にも同じ走者の走力を適用(9/7監査#10: 勝負枝だけ個人化する非対称の解消)
+            b0w = dict(r.get("bases") or {})
+            wb = {"1": r["batter"].replace("代打・", "").strip()}
+            if r1:
+                wb["2"] = b0w.get("1")
+                if r2:
+                    wb["3"] = b0w.get("2")
+                elif r3:
+                    wb["3"] = b0w.get("3")
+            else:
+                if r2:
+                    wb["2"] = b0w.get("2")
+                if r3:
+                    wb["3"] = b0w.get("3")
+            a_w, dm_w, _sbw = runner_ctx(r["team"], wb)
             nxt2_name = (r.get("next2") or "").replace("代打・", "").strip()
             pid_n2 = pid_of(r["team"], nxt2_name) if nxt2_name else None
             d_n2 = full(fetch_player(pid_n2), pid_n2) if pid_n2 else None
             cont2 = (lambda s2, o2, _d=d_n2: ev_state(s2, o2, _d)) if d_n2 is not None else None
             if pid_n:
                 dp_n = dp_prob(pid_n, P_n, pid_pi, asof)
-                ev_walk = walk_runs + ev_state(st2, outs, dist_n, cont2, p_dp=dp_n)
+                ev_walk = walk_runs + ev_state(st2, outs, dist_n, cont2,
+                                               p_dp=dp_n * dm_w, adv=a_w)
             else:
                 dp_n = None
                 ev_walk = walk_runs + re_of(st2, outs)
@@ -958,7 +987,7 @@ def analyze_ph(mmdd, gid):
                     ps_walk = 1.0
                 elif pid_n:
                     ps_walk = ps_state(st2, outs, dist_n, k - walk_runs,
-                                       cont=mk_pc(d_n2), p_dp=dp_n)
+                                       cont=mk_pc(d_n2), p_dp=dp_n * dm_w, adv=a_w)
                 else:
                     ps_walk = ps_of(st2, outs, k - walk_runs)
                 rec.update({"judge": f"P>={k}", "ps_pitch": round(ps_pitch, 3),
@@ -972,7 +1001,7 @@ def analyze_ph(mmdd, gid):
                     wp_walk = 1.0  # 押し出しサヨナラ
                 elif pid_n:
                     wp_walk = wp_state(inning, half, st2, outs, d_walk, dist_n,
-                                       cont=mk_wc(d_n2), p_dp=dp_n)
+                                       cont=mk_wc(d_n2), p_dp=dp_n * dm_w, adv=a_w)
                 else:
                     wp_walk = wp_of(inning, half, d_walk, st2, outs)
                 rec["decision_wp"] = round(wp_pitch - wp_walk, 4)
@@ -1013,7 +1042,19 @@ def analyze_ph(mmdd, gid):
                 bp_used = sp
             else:
                 bp = state_adjust_bunt(personalize_bunt(BUNT_P[is_p], is_p, r["team"], r["batter"]), st)
-                ev_b = (bp["succ"] * c(SUCC.get(st, st), outs + 1)
+                # 成功枝は同じ走者が進塁した状態→走力を持ち越す(9/7監査#10: 強攻側だけ個人化の非対称解消)
+                a_s2 = None
+                if dist_n is not None:
+                    b0s = dict(r.get("bases") or {})
+                    nbs = {}
+                    if "2" in st:
+                        nbs["3"] = b0s.get("2")
+                    if "1" in st:
+                        nbs["2"] = b0s.get("1")
+                    a_s2 = runner_ctx(r["team"], nbs)[0]
+                c_succ = (lambda s2, o2, _d=dist_n, _a=a_s2: ev_state(s2, o2, _d, adv=_a)) \
+                    if dist_n is not None else c
+                ev_b = (bp["succ"] * c_succ(SUCC.get(st, st), outs + 1)
                         + bp["hit"] * c(HITST.get(st, st), outs)
                         + bp["leadout"] * c(LEADOUT.get(st, st), outs + 1)
                         + bp["fail"] * c(st, outs + 1))
@@ -1064,7 +1105,15 @@ def analyze_ph(mmdd, gid):
                             + bp_used["out3"] * cw(HITST.get(rest, rest), outs + 1, diff_a)
                             + bp_used["fail"] * cw(st, outs + 1, diff_a))
                 else:
-                    wp_b = (bp_used["succ"] * cw(SUCC.get(st, st), outs + 1, diff_a)
+                    def cw_succ(s2, o2, d2):
+                        if half == "裏" and inning >= 9 and d2 > 0:
+                            return 1.0
+                        if o2 >= 3:
+                            return wp_end(inning, half, d2)
+                        if dist_n is not None:
+                            return wp_state(inning, half, s2, o2, d2, dist_n, adv=a_s2)
+                        return wp_of(inning, half, d2, s2, o2)
+                    wp_b = (bp_used["succ"] * cw_succ(SUCC.get(st, st), outs + 1, diff_a)
                             + bp_used["hit"] * cw(HITST.get(st, st), outs, diff_a)
                             + bp_used["leadout"] * cw(LEADOUT.get(st, st), outs + 1, diff_a)
                             + bp_used["fail"] * cw(st, outs + 1, diff_a))

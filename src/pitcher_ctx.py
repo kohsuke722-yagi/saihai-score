@@ -221,9 +221,21 @@ def main():
             print(f"  {label}: {a['p']:.1%} (n={a['n']})")
 
     # ── 投手別の暴投率・盗塁許容(9/3社長指示): raw全試合を走査してマウンド上の投手に帰属 ──
+    # +プラットーン非対称の実測(9/7: 同一打者内MH・一律±4%を置換)
     import re as _re  # noqa: F401 (下の走査で使用)
     from analyze import parse_game  # noqa
+    from palog import classify  # noqa
     wp_c, sb_c, pa_c = {}, {}, {}
+    handsP = {}
+    pdir = os.path.join(BASE, "data", "players")
+    if os.path.isdir(pdir):
+        for fn in os.listdir(pdir):
+            try:
+                dd = json.load(open(os.path.join(pdir, fn), encoding="utf-8"))
+                handsP[dd["pid"]] = (dd.get("bats"), dd.get("throws"))
+            except Exception:
+                pass
+    plat = {"右": {}, "左": {}}  # 打者の利き -> bid -> {対左/対右: [ob, n]}
     for mmdd, gid in iter_games():
         if True:  # 旧2重ループのインデント維持
             try:
@@ -253,6 +265,17 @@ def main():
                     sb_c[pid] = (a + 1, s2 + (0 if ("盗塁死" in res or "盗塁刺" in res) else 1))
                 else:
                     pa_c[pid] = pa_c.get(pid, 0) + 1
+                    cls_ = classify(res)
+                    if cls_ not in (None, "?", "SH", "IBB"):
+                        bname = e["batter"].replace("代打・", "").strip()
+                        bid = (ids2.get(e["team"]) or {}).get(bname)
+                        if bid and bid in handsP and pid in handsP:
+                            bats_, _t = handsP[bid]
+                            _b, thr_ = handsP[pid]
+                            if bats_ in ("右", "左") and thr_ in ("右", "左"):
+                                s9 = plat[bats_].setdefault(bid, {}).setdefault(f"対{thr_}", [0, 0])
+                                s9[0] += 1 if cls_ in ONBASE else 0
+                                s9[1] += 1
     tot_wp, tot_pa = sum(wp_c.values()), sum(pa_c.values())
     lg_wp = tot_wp / tot_pa
     K_WP = 200  # 縮小: 200打席でリーグ値と同重み
@@ -263,6 +286,10 @@ def main():
                        for pid, (a, s2) in sb_c.items()}
     print(f"暴投率: リーグ{lg_wp:.4f}/打席(総{tot_wp}件) 投手別{len(out['wp_rate'])}人分を縮小推定で保存")
     print(f"盗塁許容: {len(sb_c)}投手分の企図/成功を保存(走力工事で走者側と合成予定)")
+    or_r, _ = mh_or(plat["右"], "対左", "対右")
+    or_l, _ = mh_or(plat["左"], "対右", "対左")
+    out["platoon"] = {"右": round(or_r, 4), "左": round(or_l, 4)}
+    print(f"プラットーン(同一打者内MH・利き手有利オッズ比): 右打{or_r:.3f} 左打{or_l:.3f}")
 
     m_cx, _ = mh_or(cross_p, "inx", "in1")
     r1_, n1_ = pooled(cross_p, "in1")

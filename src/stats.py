@@ -120,20 +120,37 @@ def odds_combine(b: dict, pch: dict) -> dict:
     return {k: v / s for k, v in x.items()}
 
 
-PLATOON = 0.04  # 逆手有利の攻撃側ブースト(リーグ平均プラットーン差の近似・較正予定)
+PLATOON = 0.04  # 旧・一律近似(実測が無い場合のフォールバック)
+_PL_OR = None
+_ONB_KEYS = ("BB", "HBP", "1B", "2B", "3B", "HR")
+
+
+def _platoon_or():
+    global _PL_OR
+    if _PL_OR is None:
+        try:
+            with open(os.path.join(BASE, "data", "logs", "pitcher_ctx.json"), encoding="utf-8") as f:
+                _PL_OR = json.load(f).get("platoon") or {}
+        except Exception:
+            _PL_OR = {}
+    return _PL_OR
 
 
 def platoon_adjust(d: dict, bats: str, throws: str) -> dict:
+    """左右補正(9/7再設計): 一律±4%→実測の非対称オッズ比(同一打者内MH・毎晩再較正)。
+    実測2026: 右打の利き手有利はほぼゼロ(OR1.01)・左打は明確(OR1.05)。
+    有利/不利へsqrt(OR)ずつ振り分けて被出塁オッズをスケール"""
     if bats == "両":
         bats_eff = "左" if throws == "右" else "右"
     else:
         bats_eff = bats
-    opp = (bats_eff != throws)
-    f = (1 + PLATOON) if opp else (1 - PLATOON)
-    x = dict(d)
-    for k in ("BB", "1B", "2B", "3B", "HR"):
-        x[k] = d[k] * f
-    x["K"] = d["K"] * (2 - f)
-    s = sum(v for kk, v in x.items() if kk != "OUT")
-    x["OUT"] = max(0.0, 1.0 - s)
-    return x
+    orv = _platoon_or().get(bats_eff, 1 + 2 * PLATOON)
+    m = max(0.8, min(1.25, orv)) ** 0.5
+    f = m if bats_eff != throws else 1.0 / m
+    ob = sum(d.get(k, 0.0) for k in _ONB_KEYS)
+    if not (0.0 < ob < 1.0) or abs(f - 1.0) < 1e-9:
+        return dict(d)
+    odds = ob / (1 - ob) * f
+    ob2 = odds / (1 + odds)
+    fg, fb = ob2 / ob, (1 - ob2) / (1 - ob)
+    return {k: v * (fg if k in _ONB_KEYS else fb) for k, v in d.items()}
