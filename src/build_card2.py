@@ -82,9 +82,24 @@ def collect_vals(mmdd, gid, away, home):
     ph = json.load(open(os.path.join(BASE, "data", "out", mmdd, f"{gid}_ph.json"), encoding="utf-8"))
     vals = []
     for r in ph:
-        if "error" in r or r.get("decision") is None:
+        if "error" in r:
             continue
         k = r.get("kind", "ph")
+        if r.get("decision") is None:
+            # 9/7社長裁定: 回頭継投の起用差(誰を出すか)をカード採点に昇格。
+            # 値=WP起用差(最善起用なら0・それ以外は機会損失のマイナス)。負傷交代は対象外
+            if k != "relief" or r.get("accident") or r.get("decision_head_wp") is None:
+                continue
+            hv = r["decision_head_wp"] * 100
+            hsuf = "・連投" if r.get("streak_new") == 1 else ("・3連投" if r.get("streak_new", 0) >= 2 else "")
+            bw = r.get("head_best_wp") or r.get("head_best")
+            sub = "最適起用" if hv >= -0.1 else (f"最善は{bw}" if bw else None)
+            vals.append({"team": r["def_team"], "inning": r["inning"],
+                         "cat": "継投" + hsuf, "desc": f"継投 {r['old']}→{r['new']}",
+                         "v": round(hv, 2), "note": "", "ref": False, "sub": sub,
+                         "ev_from": None, "ev_to": None, "def_side": True,
+                         "state": r.get("state", "") or "", "outs": r.get("outs", 0)})
+            continue
         # 9/7裁定(社長委任): 主判定・表示値をWP(勝率変化%)へ昇格。decision_wpはWP表(design-model-v2.md①)
         # 由来。無い環境(表未構築)のみ点→%の粗換算(1点≈10%)でフォールバック
         team = r.get("team")
@@ -243,6 +258,8 @@ def build(mmdd, gid, render_png=False, light=False):
                 # 攻守で推移の向きが逆に見える混乱を主語で解消(9/3社長指摘)
                 word = "失点期待" if e.get("def_side") else "得点期待"
                 ev_txt = f' ・ {word} {e["ev_from"]:.2f} → {e["ev_to"]:.2f}点'
+            elif e.get("sub"):
+                ev_txt = f' ・ {e["sub"]}'
             outl.append(
                 f'<div class="item{first}">'
                 f'<div class="rankb {rk[i]}">{crowns[i]}</div>'
@@ -457,7 +474,8 @@ def build(mmdd, gid, render_png=False, light=False):
     s = s[:c0] + chart + s[c1:]
     counts = {}
     for x in vals_main:
-        counts[x["cat"]] = counts.get(x["cat"], 0) + 1
+        c0 = x["cat"].split("・")[0]  # 連投バッジ等のサフィックスは内訳集計では束ねる
+        counts[c0] = counts.get(c0, 0) + 1
     cstr = "・".join(f"{k}{v}" for k, v in counts.items())
     s = s.replace("<b>18:00 / 3:28</b>", f"<b>{meta['gametime']}</b>")
     s = s.replace("<b>10件</b>", f"<b>{len(vals_main)}件</b>")
