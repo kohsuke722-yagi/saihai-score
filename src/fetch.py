@@ -39,7 +39,7 @@ def fetch_pbp(mmdd: str):
     print(f"{len(urls)} games on {mmdd}")
     for u in urls:
         gid = u.rstrip("/").split("/")[-1]
-        for page in ("playbyplay.html", "index.html", "box.html"):
+        for page in ("playbyplay.html", "index.html", "box.html", "roster.html"):
             try:
                 html = get(NPB + u + page)
                 save(os.path.join(RAW, mmdd, gid, page), html)

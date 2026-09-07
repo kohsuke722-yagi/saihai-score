@@ -78,7 +78,7 @@ def main():
         print(f"{gid}: {'終了!' if done else '試合中/未開始...'}", flush=True)
         if done:
             save(os.path.join(RAW, mmdd, gid, "box.html"), box)
-            for page in ("playbyplay.html", "index.html"):
+            for page in ("playbyplay.html", "index.html", "roster.html"):
                 save(os.path.join(RAW, mmdd, gid, page),
                      get(f"{NPB}/scores/2026/{mmdd}/{gid}/{page}"))
                 time.sleep(1.2)

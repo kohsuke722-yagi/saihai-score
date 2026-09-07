@@ -142,6 +142,42 @@ def _has_game_tomorrow(team_name, asof):
     return tmr.strftime("%m%d") in td
 
 
+_FULL2SHORT_T = {"読売ジャイアンツ": "巨人", "横浜DeNAベイスターズ": "DeNA", "阪神タイガース": "阪神",
+                 "広島東洋カープ": "広島", "中日ドラゴンズ": "中日", "東京ヤクルトスワローズ": "ヤクルト",
+                 "福岡ソフトバンクホークス": "ソフトバンク", "北海道日本ハムファイターズ": "日本ハム",
+                 "千葉ロッテマリーンズ": "ロッテ", "埼玉西武ライオンズ": "西武",
+                 "オリックス・バファローズ": "オリックス", "東北楽天ゴールデンイーグルス": "楽天"}
+
+
+def bench_pitchers(mmdd, gid):
+    """当日ベンチ入りの投手(チーム短縮名→[選手名])。NPBのroster.html=実名簿(9/7社長指摘:
+    「登板実績からの推定」は抹消済み・ベンチ外の幻の候補を生むため実名簿を正とする)"""
+    path = os.path.join(BASE, "data", "raw", mmdd, gid, "roster.html")
+    html = None
+    if os.path.exists(path):
+        html = open(path, encoding="utf-8").read()
+    else:
+        try:
+            from fetch import get, save, NPB
+            html = get(f"{NPB}/scores/2026/{mmdd}/{gid}/roster.html")
+            save(path, html)
+        except Exception:
+            return {}
+    toks = [t.strip() for t in re.split(r"<[^>]+>", html) if t.strip()]
+    out_, cur, mode = {}, None, False
+    for t in toks:
+        if t in _FULL2SHORT_T:
+            cur, mode = _FULL2SHORT_T[t], False
+        elif t == "投手":
+            mode = True
+        elif t in ("捕手", "内野手", "外野手"):
+            mode = False
+        elif (mode and cur and not t.isdigit()
+              and not re.fullmatch(r"[右左両]投[右左両]打", t) and len(t) <= 12):
+            out_.setdefault(cur, []).append(t)
+    return out_
+
+
 def removed_soon(team_name, short_name, mmdd, days=3):
     """②-a Layer2: 選手がmmdd後days日以内に出場選手登録抹消されたか(公示kouji.json)"""
     import datetime as _dt
@@ -158,15 +194,29 @@ def removed_soon(team_name, short_name, mmdd, days=3):
     return False
 
 
-def bullpen_candidates(team_name, inning, entry_inning, ids, asof):
+def bullpen_candidates(team_name, inning, entry_inning, ids, asof, bench=None):
     """②-d: その日使えた自軍リリーフ候補pidの列挙(design-model-v2.md)。
-    在籍推定=直近14日以内に登板・3連投+は除外(翌日登板率9.3%実測=原則使わない運用)・
-    この試合で登板済みは除外。「取り得た手」は観測できた候補のみ=保守的で誤爆しない方向"""
+    第一候補ソース=当日ベンチ実名簿(roster.html・9/7社長指摘で導入)。無い場合のみ
+    従来の推定(公示名簿→直近14日登板+ローテ除外)。共通: 登板済み・3連投+は除外"""
     import datetime as _dt
     tc = TEAM_NAME2CODE.get(team_name, "")
     eo_r = PCTX.get("e_outs", {}).get("relief", {})
     used = {ids.get(nm) for nm, inn in entry_inning.items() if inn <= inning}
     d0 = _dt.date(2026, int(asof[:2]), int(asof[2:]))
+    if bench:
+        # 実名簿モード: ベンチ入り投手のみが候補(休養中のローテ組はそもそもベンチ外)
+        cands = []
+        for nm in bench:
+            pid = ids.get(nm)
+            if not pid:
+                n0 = _norm_name(nm)  # 登板しなかった投手はplaybyplayにリンク無し→名簿から解決
+                hits = [p for p, d in _HAND.items()
+                        if d.get("team") == tc and _norm_name(d.get("name", "")).startswith(n0)]
+                pid = hits[0] if len(hits) == 1 else None
+            if not pid or pid in used or rest_streak(pid, asof) >= 2:
+                continue
+            cands.append(pid)
+        return cands
     roster = KOUJI.get("rosters", {}).get(asof, {}).get(tc)  # 公示の一軍名簿(9/7〜蓄積)があれば厳密判定
     cands = []
     for pid, info in _HAND.items():
@@ -415,6 +465,7 @@ def analyze_ph(mmdd, gid):
     away = next(e["team"] for e in events if e["half"] == "表")
     home = next(e["team"] for e in events if e["half"] == "裏")
 
+    bench_map = bench_pitchers(mmdd, gid)  # 当日ベンチ実名簿(②-d候補の正ソース)
     cur_pitcher = {}
     slots = {away: {}, home: {}}
     seq = {away: 0, home: 0}
@@ -698,7 +749,8 @@ def analyze_ph(mmdd, gid):
                                     r["def_team"], asof), 3)
                     evals, wvals = {}, {}
                     for pid_c in set(bullpen_candidates(r["def_team"], inning, entry_inning,
-                                                        ids, asof)) | {pid_nw}:
+                                                        ids, asof,
+                                                        bench_map.get(r["def_team"]))) | {pid_nw}:
                         P_c = fetch_player(pid_c)
                         stk_c = rest_streak(pid_c, asof)
                         rk_c = "fresh" if stk_c == 0 else ("r1" if stk_c == 1 else "r2")
