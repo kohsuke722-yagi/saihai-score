@@ -63,7 +63,7 @@ def parse_meta(mmdd, gid):
         seg = plain[i + len(full):].split()
         toks = []
         for t in seg[:22]:
-            if re.fullmatch(r"\d+|x|X", t):
+            if re.fullmatch(r"\d+[xX]?|[xX]", t):  # サヨナラ回は「1x」等の表記になる
                 toks.append(t)
             elif toks:
                 break
