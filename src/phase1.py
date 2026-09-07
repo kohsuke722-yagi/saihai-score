@@ -90,6 +90,11 @@ LG_SB_SUCC = _sb_succ / _sb_att if _sb_att else 0.7
 
 ONBASE_KEYS = ("BB", "HBP", "1B", "2B", "3B", "HR")
 
+# 明日以降へ跨ぐコスト(future_cost)の点→勝率換算(9/7社長指摘: 大差で守護神を使う損は
+# 「今日のレバレッジ」でなく「明日の平均レバレッジ」で測るべき)。1点=10%は平均場面の
+# 実測レンジ(接戦12-15%/大差2.5%)の中庸・較正予定
+R2W_AVG = 0.10
+
 TEAM_NAME2CODE = {"巨人": "g", "DeNA": "db", "阪神": "t", "広島": "c", "中日": "d",
                   "ヤクルト": "s", "ソフトバンク": "h", "日本ハム": "f", "ロッテ": "m",
                   "西武": "l", "オリックス": "b", "楽天": "e"}
@@ -677,7 +682,7 @@ def analyze_ph(mmdd, gid):
                     rec0["usage_cost_new"] = round(
                         future_cost(pitcher_dist2(pid_nw, P_nw, inning, asof), stk,
                                     r["def_team"], asof), 3)
-                    evals, dists = {}, {}
+                    evals, wvals = {}, {}
                     for pid_c in set(bullpen_candidates(r["def_team"], inning, entry_inning,
                                                         ids, asof)) | {pid_nw}:
                         P_c = fetch_player(pid_c)
@@ -689,17 +694,22 @@ def analyze_ph(mmdd, gid):
                         ev_c = ev_chain(ds_c)
                         if ev_c is None:
                             continue
-                        evals[pid_c] = ev_c + future_cost(pd_c, stk_c, r["def_team"], asof)
-                        dists[pid_c] = ds_c
+                        fc_c = future_cost(pd_c, stk_c, r["def_team"], asof)
+                        evals[pid_c] = ev_c + fc_c
+                        if HAS_WP:
+                            wv = wp_chain(ds_c)
+                            if wv is not None:
+                                # 今日の失点はWP(=大差なら自動で軽い)・明日のコストは平均レバレッジ
+                                wvals[pid_c] = wv + fc_c * R2W_AVG
                     if pid_nw in evals:
                         best = min(evals, key=evals.get)
                         rec0["head_best"] = _HAND.get(best, {}).get("name", r["new"] if best == pid_nw else best)
                         rec0["head_n_cand"] = len(evals)
                         rec0["decision_head"] = round(evals[best] - evals[pid_nw], 3)
-                        if HAS_WP and best != pid_nw:
-                            wpa, wpb = wp_chain(dists[pid_nw]), wp_chain(dists[best])
-                            if wpa is not None and wpb is not None:
-                                rec0["decision_head_wp"] = round(wpb - wpa, 4)
+                        if pid_nw in wvals and len(wvals) > 1:
+                            bw = min(wvals, key=wvals.get)
+                            rec0["head_best_wp"] = _HAND.get(bw, {}).get("name", bw)
+                            rec0["decision_head_wp"] = round(wvals[bw] - wvals[pid_nw], 4)
                 out.append(rec0)
                 continue
             pid_old, pid_new = ids.get(r["old"]), ids.get(r["new"])
@@ -787,12 +797,13 @@ def analyze_ph(mmdd, gid):
             if HAS_WP:
                 wpv_stay, wpv_new = wp_chain(ds_stay), wp_chain(ds_new)
                 rec["decision_wp"] = round(wpv_stay - wpv_new, 4)
+                # 将来コスト(明日の可用性)は今日の点差と無関係→平均レバレッジで換算(9/7)
                 if rec.get("one_point"):
                     wp1_stay = wp_state(inning, half, st, outs, diff_a, ds_stay[0], adv=adv_r)
                     wp1_new = wp_state(inning, half, st, outs, diff_a, ds_new[0], adv=adv_r)
-                    rec["decision_wp_net"] = round(wp1_stay - wp1_new - r2w(fc_new), 4)
+                    rec["decision_wp_net"] = round(wp1_stay - wp1_new - fc_new * R2W_AVG, 4)
                 else:
-                    rec["decision_wp_net"] = round(rec["decision_wp"] - r2w(fc_new), 4)
+                    rec["decision_wp_net"] = round(rec["decision_wp"] - fc_new * R2W_AVG, 4)
             out.append(rec)
             continue
 
@@ -1025,7 +1036,9 @@ if __name__ == "__main__":
                     if r.get("decision_head") is not None:
                         hd = f" 起用差 {r['decision_head']:+.3f}点(最善:{r.get('head_best')}・候補{r.get('head_n_cand')})"
                         if r.get("decision_head_wp") is not None:
-                            hd += f" [WP {r['decision_head_wp']:+.2%}]"
+                            bw = r.get("head_best_wp")
+                            tag = f"・WP最善:{bw}" if bw and bw != r.get("head_best") else ""
+                            hd += f" [WP {r['decision_head_wp']:+.2%}{tag}]"
                     print(f"{r['inning']}回{r['half']} {r['def_team']}守備 継投(回頭): {r['old']}→{r['new']}({rest_s0}) 将来コスト−{r['usage_cost_new']:.3f}点{hd}")
                 continue
             rest_s = ("休養明け", "連投", "3連投+")[min(2, r["streak_new"])]
