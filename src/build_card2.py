@@ -85,7 +85,12 @@ def collect_vals(mmdd, gid, away, home):
         if "error" in r or r.get("decision") is None:
             continue
         k = r.get("kind", "ph")
-        team, v = r.get("team"), r["decision"]
+        # 9/7裁定(社長委任): 主判定・表示値をWP(勝率変化%)へ昇格。decision_wpはWP表(design-model-v2.md①)
+        # 由来。無い環境(表未構築)のみ点→%の粗換算(1点≈10%)でフォールバック
+        team = r.get("team")
+        wp = r.get("decision_wp_net", r.get("decision_wp"))
+        v = wp * 100 if wp is not None else r.get("decision_net", r["decision"]) * 10
+        catsuf = ""
         if k in ("bunt", "squeeze"):
             pb = "投手" if r.get("batter_is_pitcher") else ""
             desc = f"{r['batter']}{pb and '(投手)'}の{'スクイズ' if k == 'squeeze' else '送りバント'}"
@@ -94,8 +99,10 @@ def collect_vals(mmdd, gid, away, home):
         elif k == "ibb":
             team, desc = r["def_team"], f"{r['batter']}への申告敬遠"
         elif k == "relief":
-            team, v = r["def_team"], r.get("decision_net", r["decision"])
+            team = r["def_team"]
             desc = f"継投 {r['old']}→{r['new']}"
+            if r.get("streak_new", 0) >= 1:  # ②-e 連投の事実バッジ(9/7裁定・委任)
+                catsuf = "・連投" if r["streak_new"] == 1 else "・3連投"
         elif k == "pr":
             desc = f"代走 {r['orig']}→{r['sub']}"
         elif k == "swing":
@@ -113,7 +120,8 @@ def collect_vals(mmdd, gid, away, home):
         ef = et = None
         if k in FT:
             ef, et = r.get(FT[k][0]), r.get(FT[k][1])
-        vals.append({"team": team, "inning": r["inning"], "cat": CATLABEL.get(k, k) + ("(参考)" if ref else ""),
+        vals.append({"team": team, "inning": r["inning"],
+                     "cat": CATLABEL.get(k, k) + catsuf + ("(参考)" if ref else ""),
                      "desc": desc, "v": round(v, 2), "note": note, "ref": ref,
                      "ev_from": ef, "ev_to": et, "def_side": k in ("relief", "ibb"),
                      "state": r.get("state", "") or "", "outs": r.get("outs", 0)})
@@ -200,7 +208,7 @@ def build(mmdd, gid, render_png=False, light=False):
     center = round(net(win["short"]) - net(lose["short"]), 2)
 
     def fmt(v, pt=True):
-        return f"{v:+.2f}" + ("点" if pt else "")
+        return f"{v:+.1f}" + ("%" if pt else "")
 
     def situ_svg(state, outs):
         """TV風の場面表示: 塁ダイヤ(占有=黄)+アウトランプ(9/3社長指示)"""
@@ -244,7 +252,7 @@ def build(mmdd, gid, render_png=False, light=False):
                 f'<div style="text-align:center;flex:none">'
                 f'<div class="ival {cls}">{fmt(e["v"], False)}</div>'
                 f'<div style="font-size:11.5px;font-weight:900;letter-spacing:2px;opacity:.8" class="ival {cls}">'
-                f'{("失点減" if e["v"] >= 0 else "失点増") if e.get("def_side") else ("得点増" if e["v"] >= 0 else "得点減")}</div></div>'
+                f'{"勝率UP" if e["v"] >= 0 else "勝率DOWN"}</div></div>'
                 f'<div class="mag {cls}" style="width:{w}%"></div></div>')
         if len(evs) < 3:  # 少ない試合は正直に表示(穴埋めしない・9/3社長指摘)
             outl.append(
@@ -265,7 +273,7 @@ def build(mmdd, gid, render_png=False, light=False):
     max_inn = max(meta.get("innings", 0),
                   max((x["inning"] for x in vals_main), default=9)) or 9
     ac, hc = cum(AWAY["short"], max_inn), cum(HOME["short"], max_inn)
-    lim = max(0.5, max(abs(v) for v in ac + hc))
+    lim = max(1.0, max(abs(v) for v in ac + hc))
     X0, X1, BASEY = 44, 856, 118
     SCALE = 88 / lim
 
@@ -292,7 +300,7 @@ def build(mmdd, gid, render_png=False, light=False):
     area_h = dh + f"L{X1},{BASEY} L{X0},{BASEY} Z"
     top_all = sorted(vals_main, key=lambda x: -abs(x["v"]))[:3]
     # 注釈: |0.10|以上を最大4件(なければ最大の1件)。起きた回の位置に置き、該当点へ引き出し線
-    notable = sorted([e for e in vals_main if abs(e["v"]) >= 0.10], key=lambda x: -abs(x["v"]))[:4]
+    notable = sorted([e for e in vals_main if abs(e["v"]) >= 1.0], key=lambda x: -abs(x["v"]))[:4]
     if not notable and top_all:
         notable = top_all[:1]
     notable.sort(key=lambda e: e["inning"])
@@ -408,7 +416,7 @@ def build(mmdd, gid, render_png=False, light=False):
         cls = "pos" if net_v >= 0 else "neg"
         sw = SW_UP if net_v >= 0 else SW_DOWN
         return (f'<div class="lb c-yk">{team_d["short"]}の{word}</div>',
-                f'<div class="numw {cls}">{fmt(net_v, False)}<span class="pt">点</span></div>', sw)
+                f'<div class="numw {cls}">{fmt(net_v, False)}<span class="pt">%</span></div>', sw)
     la, na, swa = metric(AWAY, net(AWAY["short"]))
     lh, nh, swh = metric(HOME, net(HOME["short"]))
     s = s.replace('<div class="lb c-hs">阪神のプラス効果</div>', la)
@@ -419,7 +427,7 @@ def build(mmdd, gid, render_png=False, light=False):
     s = s.replace(SW_DOWN, "@@SWH@@", 1)
     s = s.replace("@@SWA@@", swa).replace("@@SWH@@", swh)
     s = s.replace('<div class="cnum">+1.7<span class="pt">点</span></div>',
-                  f'<div class="cnum">{fmt(center, False)}<span class="pt">点</span></div>')
+                  f'<div class="cnum">{fmt(center, False)}<span class="pt">%</span></div>')
     # 勝者の采配が下回る試合ではラベルを反転(固定「WINに貢献」だと嘘になる)
     s = s.replace('<div class="cwin">WIN に貢献</div>',
                   '<div class="cwin">WIN側の采配が上</div>' if center >= 0
@@ -458,7 +466,10 @@ def build(mmdd, gid, render_png=False, light=False):
         s = re.sub(r'<div class="row"><span>最大インパクト</span><b>[^<]*</b></div>',
                    f'<div class="row"><span>最大インパクト</span><b>{top_all[0]["inning"]}回 {top_all[0]["cat"]} {fmt(top_all[0]["v"])}</b></div>', s)
     s = re.sub(r"塁・アウト状況の得点期待値\(RE24\)で「指示の瞬間」を採点。結果論ではなく、\s*選手の実行\(成否\)と分離した監督の判断そのものの評価です。",
-               "指示の瞬間の期待値差で採点(結果は使わない)。当季実測RE表×直近重み(バックテスト較正済み)×相手投手×左右×走者の走力。7回以降の接戦は得点確率でも判定。", s)
+               "指示の瞬間に勝率が何%動いたかで採点(結果は使わない)。当季実測の得点分布から構築した"
+               "勝率表×直近重み×相手投手×左右×走者の走力。点差・回・サヨナラ・引分の文脈込み。", s)
+    s = s.replace("数値=得点期待値の変化(点)。プラス=自軍に有利な指示。",
+                  "数値=勝利確率の変化(%)。プラス=自軍に有利な指示。")
     s = s.replace('>SAMPLE<', '><')
     s = s.replace('<h1>采配の<span class="em">勝敗インパクト</span>分析</h1>', '')  # 9/3社長指示: タイトル文字削除
     s = s.replace("@saihaiscore_lab|計算方法はnoteで全公開|データ: NPB公式記録より自動集計",
@@ -482,14 +493,14 @@ def build(mmdd, gid, render_png=False, light=False):
     line1 = f"{dstr} {AWAY['short']} {meta['sc_away']}-{meta['sc_home']} {HOME['short']}"
     best = max(vals_main, key=lambda x: x["v"], default=None)
     worst = min(vals_main, key=lambda x: x["v"], default=None)
-    if best and best["v"] >= 0.05:
-        line2 = f"采配では{play_str(best)}が一番のプラス({fmt(best['v'], False)})"
-        if worst and worst["v"] <= -0.05:
-            line2 += f"で、逆に{play_str(worst)}({fmt(worst['v'], False)})が悪手だった。"
+    if best and best["v"] >= 0.5:
+        line2 = f"采配では{play_str(best)}が一番のプラス(勝率{fmt(best['v'])})"
+        if worst and worst["v"] <= -0.5:
+            line2 += f"で、逆に{play_str(worst)}(勝率{fmt(worst['v'])})が悪手だった。"
         else:
             line2 += "で、逆に目立った悪手のない試合だった。"
-    elif worst and worst["v"] <= -0.05:
-        line2 = f"采配では目立ったプラスがなく、{play_str(worst)}({fmt(worst['v'], False)})が悪手だった。"
+    elif worst and worst["v"] <= -0.5:
+        line2 = f"采配では目立ったプラスがなく、{play_str(worst)}(勝率{fmt(worst['v'])})が悪手だった。"
     else:
         line2 = "采配では大きな動きのない試合だった。"
     line3 = f"#NPB #{HASHTAG.get(AWAY['short'], AWAY['short'])} #{HASHTAG.get(HOME['short'], HOME['short'])}"
