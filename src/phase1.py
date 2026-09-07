@@ -18,6 +18,7 @@ from analyze import RE, re_of, ps_of, HAS_RETAB, wp_of, wp_end, HAS_WP  # noqa
 from runners import annotate, parse_box_subs, REACH  # noqa
 from stats import fetch_player, odds_combine, platoon_adjust, LEAGUE  # noqa
 from stats2 import batter_dist2, pitcher_dist2, effective_n, league_meta, dp_prob  # noqa
+from palog import classify  # noqa (A-3: 当日の被打結果の分類に使用)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -127,6 +128,29 @@ def _has_game_tomorrow(team_name, asof):
     if tmr > _dt.date(2026, int(td[-1][:2]), int(td[-1][2:])):
         return True
     return tmr.strftime("%m%d") in td
+
+
+def bullpen_candidates(team_name, inning, entry_inning, ids, asof):
+    """②-d: その日使えた自軍リリーフ候補pidの列挙(design-model-v2.md)。
+    在籍推定=直近14日以内に登板・3連投+は除外(翌日登板率9.3%実測=原則使わない運用)・
+    この試合で登板済みは除外。「取り得た手」は観測できた候補のみ=保守的で誤爆しない方向"""
+    import datetime as _dt
+    tc = TEAM_NAME2CODE.get(team_name, "")
+    eo_r = PCTX.get("e_outs", {}).get("relief", {})
+    used = {ids.get(nm) for nm, inn in entry_inning.items() if inn <= inning}
+    d0 = _dt.date(2026, int(asof[:2]), int(asof[2:]))
+    cands = []
+    for pid, info in _HAND.items():
+        if info.get("team") != tc or pid in used or pid not in eo_r:
+            continue
+        past = [x for x in PCTX.get("appearances", {}).get(pid, []) if x < asof]
+        if not past:
+            continue
+        last = _dt.date(2026, int(past[-1][:2]), int(past[-1][2:]))
+        if (d0 - last).days > 14 or rest_streak(pid, asof) >= 2:
+            continue
+        cands.append(pid)
+    return cands
 
 
 def future_cost(dist_x, streak_before, team_name=None, asof=None):
@@ -332,11 +356,8 @@ def state_adjust_bunt(bp, st):
 
 
 def name_ids(mmdd, gid):
-    html = open(os.path.join(BASE, "data", "raw", mmdd, gid, "playbyplay.html"), encoding="utf-8").read()
-    mp = {}
-    for pid, nm in re.findall(r'href="/bis/players/(\d+)\.html">([^<]+)</a>', html):
-        mp[nm.strip()] = pid
-    return mp
+    from analyze import game_ids  # raw優先・無ければイベントキャッシュ(バックフィル対応9/7)
+    return game_ids(mmdd, gid)
 
 
 def is_pitcher_bat(P):
@@ -357,6 +378,7 @@ def analyze_ph(mmdd, gid):
     seq = {away: 0, home: 0}
     score = {away: 0, home: 0}
     bf = {}               # 投手名→この試合の対戦打者数(巡目計算用)
+    day_pa = {}           # 投手名→当日ここまでの被打結果クラス列(A-3: 当日の出来ブレンド用)
     entry_inning = {}     # 投手名→登板した回
     half_pa = {}          # (回,表裏)→打席行数(回頭交代の判定用)
     pending_change = []
@@ -381,6 +403,7 @@ def analyze_ph(mmdd, gid):
                     pending_change.append({"kind": "relief", "def_team": defense,
                                            "old": old, "new": new, "bf_old": bf.get(old, 0),
                                            "old_entry": entry_inning.get(old, 1),
+                                           "day_old": list(day_pa.get(old, [])),
                                            "at_head": half_pa.get((e["inning"], e["half"]), 0) == 0,
                                            "inning": e["inning"], "half": e["half"]})
                 cur_pitcher[defense] = new
@@ -398,6 +421,10 @@ def analyze_ph(mmdd, gid):
         seq[team] += 1
         nxt = slots[team].get((s + 1) % 9)
         bf[cur_pitcher.get(defense, "")] = bf.get(cur_pitcher.get(defense, ""), 0) + 1
+        cls_day = classify(e.get("result", ""))
+        if cls_day and cls_day not in ("SH", "?"):
+            day_pa.setdefault(cur_pitcher.get(defense, ""), []).append(
+                "OUT" if cls_day in ("DP", "OUT_G", "OUT_A", "OUT") else cls_day)
         while pending_change:
             pc_ = pending_change.pop(0)
             results.append({**pc_, "team": team, "outs": e["outs"], "state": e["runners"],
@@ -576,32 +603,7 @@ def analyze_ph(mmdd, gid):
                 out.append({**r, "judge": "none", "decision": None, "accident": True,
                             "note": "1打者未満で降板=負傷・アクシデント交代(採点対象外)"})
                 continue
-            # ⑨継投。回頭のリリーフ交代は記録のみ(9/3裁定: 続投は選択肢外)
-            if r.get("old_entry", 1) > 1 and r.get("at_head"):
-                rec0 = {**r, "judge": "none", "decision": None,
-                        "note": "回頭リリーフ交代=記録のみ(実決断は「どのリリーフか」・将来課題)"}
-                pid_nw = ids.get(r["new"])
-                if pid_nw:
-                    P_nw = fetch_player(pid_nw)
-                    stk = rest_streak(pid_nw, asof)
-                    rec0["streak_new"] = stk
-                    rec0["usage_cost_new"] = round(
-                        future_cost(pitcher_dist2(pid_nw, P_nw, inning, asof), stk,
-                                    r["def_team"], asof), 3)
-                out.append(rec0)
-                continue
-            pid_old, pid_new = ids.get(r["old"]), ids.get(r["new"])
-            if not pid_old or not pid_new:
-                out.append({**r, "error": f"投手ID不明 {r['old']}/{r['new']}"})
-                continue
-            P_old, P_new = fetch_player(pid_old), fetch_player(pid_new)
-            pd_old = pitcher_dist2(pid_old, P_old, inning, asof)
-            pd_new = pitcher_dist2(pid_new, P_new, inning, asof)
-            streak = rest_streak(pid_new, asof)
-            rk = "fresh" if streak == 0 else ("r1" if streak == 1 else "r2")
-            pd_new_adj = ob_mult(pd_new, PCTX["rest"].get(rk, 1.0))
-            bf0 = r.get("bf_old", 0)
-
+            # ── 3打者チェーン評価(通常継投と回頭「誰を出すか」の共有部品) ──
             def opt_dists(pdist_fn, thr_x):
                 ds = []
                 for idx, nm in enumerate((r.get("batter"), r.get("next"), r.get("next2"))):
@@ -621,6 +623,76 @@ def analyze_ph(mmdd, gid):
                 c3 = (lambda s2, o2, _d=ds[2]: ev_state(s2, o2, _d)) if ds[2] is not None else None
                 c2 = (lambda s2, o2, _d=ds[1], _c=c3: ev_state(s2, o2, _d, _c)) if ds[1] is not None else None
                 return ev_state(st, outs, ds[0], c2, adv=adv_r)
+
+            def wp_chain(ds):
+                if ds[0] is None:
+                    return None
+                c3 = mk_wc(ds[2])
+                c2 = (lambda s2, o2, d2, _d=ds[1], _c=c3:
+                      wp_state(inning, half, s2, o2, d2, _d, cont=_c)) \
+                    if ds[1] is not None else None
+                return wp_state(inning, half, st, outs, diff_a, ds[0], cont=c2, adv=adv_r)
+
+            # ⑨回頭のリリーフ交代: 続投は選択肢外(9/3裁定)。②-d(9/7): 「誰を出すか」を
+            # その日可用な自軍ブルペン対抗手と比較(decisionはNone=カード非掲載・表示は裁定待ち)
+            if r.get("old_entry", 1) > 1 and r.get("at_head"):
+                rec0 = {**r, "judge": "none", "decision": None,
+                        "note": "回頭リリーフ交代(カード外・②-d起用差の並走評価)"}
+                pid_nw = ids.get(r["new"])
+                if pid_nw:
+                    P_nw = fetch_player(pid_nw)
+                    stk = rest_streak(pid_nw, asof)
+                    rec0["streak_new"] = stk
+                    rec0["usage_cost_new"] = round(
+                        future_cost(pitcher_dist2(pid_nw, P_nw, inning, asof), stk,
+                                    r["def_team"], asof), 3)
+                    evals, dists = {}, {}
+                    for pid_c in set(bullpen_candidates(r["def_team"], inning, entry_inning,
+                                                        ids, asof)) | {pid_nw}:
+                        P_c = fetch_player(pid_c)
+                        stk_c = rest_streak(pid_c, asof)
+                        rk_c = "fresh" if stk_c == 0 else ("r1" if stk_c == 1 else "r2")
+                        pd_c = ob_mult(pitcher_dist2(pid_c, P_c, inning, asof),
+                                       PCTX["rest"].get(rk_c, 1.0))
+                        ds_c = opt_dists(lambda i2, _p=pd_c: _p, P_c.get("throws", "右"))
+                        ev_c = ev_chain(ds_c)
+                        if ev_c is None:
+                            continue
+                        evals[pid_c] = ev_c + future_cost(pd_c, stk_c, r["def_team"], asof)
+                        dists[pid_c] = ds_c
+                    if pid_nw in evals:
+                        best = min(evals, key=evals.get)
+                        rec0["head_best"] = _HAND.get(best, {}).get("name", r["new"] if best == pid_nw else best)
+                        rec0["head_n_cand"] = len(evals)
+                        rec0["decision_head"] = round(evals[best] - evals[pid_nw], 3)
+                        if HAS_WP and best != pid_nw:
+                            wpa, wpb = wp_chain(dists[pid_nw]), wp_chain(dists[best])
+                            if wpa is not None and wpb is not None:
+                                rec0["decision_head_wp"] = round(wpb - wpa, 4)
+                out.append(rec0)
+                continue
+            pid_old, pid_new = ids.get(r["old"]), ids.get(r["new"])
+            if not pid_old or not pid_new:
+                out.append({**r, "error": f"投手ID不明 {r['old']}/{r['new']}"})
+                continue
+            P_old, P_new = fetch_player(pid_old), fetch_player(pid_new)
+            pd_old = pitcher_dist2(pid_old, P_old, inning, asof)
+            pd_new = pitcher_dist2(pid_new, P_new, inning, asof)
+            # A-3(9/7実装): 当日ここまでの被打結果を続投側へブレンド(「今日打たれてるエース」を
+            # 通常のエース扱いにしない)。判断時点で見えている情報=結果論にならない。K=45較正予定
+            day = r.get("day_old") or []
+            if day:
+                w_day = len(day) / (len(day) + 45.0)
+                cnt = {}
+                for c_ in day:
+                    cnt[c_] = cnt.get(c_, 0) + 1
+                pd_old = {k2: (1 - w_day) * pd_old.get(k2, 0.0) + w_day * cnt.get(k2, 0) / len(day)
+                          for k2 in set(pd_old) | set(cnt)}
+                r["day_bf"] = len(day)
+            streak = rest_streak(pid_new, asof)
+            rk = "fresh" if streak == 0 else ("r1" if streak == 1 else "r2")
+            pd_new_adj = ob_mult(pd_new, PCTX["rest"].get(rk, 1.0))
+            bf0 = r.get("bf_old", 0)
 
             def ps_chain(ds, kk):
                 def mkc(d, nxtc):
@@ -682,12 +754,6 @@ def analyze_ph(mmdd, gid):
                             "ps_new": round(ps_chain(ds_new, k), 3)})
                 rec["decision_prob"] = round(rec["ps_stay"] - rec["ps_new"], 3)
             if HAS_WP:
-                def wp_chain(ds):
-                    c3 = mk_wc(ds[2])
-                    c2 = (lambda s2, o2, d2, _d=ds[1], _c=c3:
-                          wp_state(inning, half, s2, o2, d2, _d, cont=_c)) \
-                        if ds[1] is not None else None
-                    return wp_state(inning, half, st, outs, diff_a, ds[0], cont=c2, adv=adv_r)
                 wpv_stay, wpv_new = wp_chain(ds_stay), wp_chain(ds_new)
                 rec["decision_wp"] = round(wpv_stay - wpv_new, 4)
                 if rec.get("one_point"):
@@ -920,9 +986,16 @@ if __name__ == "__main__":
             continue
         if r.get("kind") == "relief":
             if r.get("decision") is None:
-                if r.get("usage_cost_new") is not None:
+                if r.get("accident"):
+                    print(f"{r['inning']}回{r['half']} {r['def_team']}守備 継投: {r['old']}→{r['new']} 負傷・アクシデント交代=採点対象外")
+                elif r.get("usage_cost_new") is not None:
                     rest_s0 = ("休養明け", "連投", "3連投+")[min(2, r.get("streak_new", 0))]
-                    print(f"{r['inning']}回{r['half']} {r['def_team']}守備 継投(回頭・記録のみ): {r['old']}→{r['new']}({rest_s0}) 起用の将来コスト −{r['usage_cost_new']:.3f}点")
+                    hd = ""
+                    if r.get("decision_head") is not None:
+                        hd = f" 起用差 {r['decision_head']:+.3f}点(最善:{r.get('head_best')}・候補{r.get('head_n_cand')})"
+                        if r.get("decision_head_wp") is not None:
+                            hd += f" [WP {r['decision_head_wp']:+.2%}]"
+                    print(f"{r['inning']}回{r['half']} {r['def_team']}守備 継投(回頭): {r['old']}→{r['new']}({rest_s0}) 将来コスト−{r['usage_cost_new']:.3f}点{hd}")
                 continue
             rest_s = ("休養明け", "連投", "3連投+")[min(2, r["streak_new"])]
             op = "・ワンポイント判定" if r.get("one_point") else ""
