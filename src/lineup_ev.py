@@ -188,53 +188,71 @@ def analyze_lineup(mmdd, gid):
             if bench_best is None or solo > bench_best[1]:
                 bench_best = (nm, solo)
 
-        # ベストメンバー探索(9/8社長要望): 同ポジ群(捕/内/外)内の入替のみ・最大2枚・
-        # 貪欲(1枚ずつ最良)→最終並べ替え。守備力・休養・疲労は考慮外の参考値(設計書7節)
-        def pos_group(role):
+        # ベストメンバー探索(9/8社長要望→9/8丸指摘で強化): 入替候補は「守備起用実績」で適格性判定
+        # (今季その正確なポジションで3先発以上かつ直近30日以内=球団が実際に守備で使っている事実)。
+        # 最大2枚・貪欲→最終並べ替え。守備範囲・年齢負担は実績で代理、休養・疲労は考慮外(免責)
+        try:
+            DEF = json.load(open(os.path.join(BASE, "data", "logs", "defense_starts.json"),
+                                 encoding="utf-8"))
+        except Exception:
+            DEF = {}
+        import datetime as _dt
+
+        def exact_pos(role):
             for ch in role or "":
-                if ch == "捕":
-                    return "捕"
-                if ch in "一二三遊":
-                    return "内"
-                if ch in "左中右":
-                    return "外"
-                if ch == "指":
-                    return "指"
-                if ch == "投":
-                    return "投"
-            return "内"
+                if ch in "捕一二三遊左中右指投":
+                    return ch
+            return None
+
+        def can_play(nm, pc):
+            if pc == "指":
+                return True
+            d = DEF.get(f"{tm}|{nm}", {}).get(pc)
+            if not d or d["n"] < 3:
+                return False
+            a = _dt.date(2026, int(mmdd[:2]), int(mmdd[2:]))
+            l = _dt.date(2026, int(d["last"][:2]), int(d["last"][2:]))
+            return (a - l).days <= 30
+
         cur_d = list(dists)
         swaps_in, used_b = [], set()
         for _ in range(2):
             base_ev0 = game_ev(cur_d)
             best_gain, best_swap = 0.05, None  # 微差の入替提案はしない
             for si, p in enumerate(players):
-                g = pos_group(p["role"])
-                if g == "投":
+                pc = exact_pos(p["role"])
+                if pc in (None, "投"):
                     continue
                 for nm, grp, pidc, dc, solo in cands:
-                    if nm in used_b or (g != "指" and grp != g):
+                    if nm in used_b or not can_play(nm, pc):
                         continue
                     trial = list(cur_d)
                     trial[si] = dc
                     gain = game_ev(trial) - base_ev0
                     if gain > best_gain:
-                        best_gain, best_swap = gain, (si, nm, grp, dc)
+                        best_gain, best_swap = gain, (si, nm, pc, dc)
             if not best_swap:
                 break
-            si, nm, grp, dc = best_swap
+            si, nm, pc, dc = best_swap
             cur_d[si] = dc
             used_b.add(nm)
-            swaps_in.append((nm, {"捕": "捕手", "内": "内野", "外": "外野"}.get(grp, grp)))
+            swaps_in.append((nm, pc))
         ev_bm = None
         if swaps_in:
             _, ev_bm = optimize(cur_d, fixed=fixed, restarts=1)
+        # ベンチ最強打者がどの守備位置にも適格でない=代打専任(丸型)の判定 → カードで役割として尊重
+        pinch_ace = None
+        if bench_best:
+            slots_pos = [exact_pos(p["role"]) for p in players]
+            if not any(can_play(bench_best[0], pc) for pc in slots_pos if pc not in (None, "投")):
+                pinch_ace = bench_best[0]
         out.append({"team": tm, "players": players, "fixed": fixed,
                     "ev_actual": round(ev_act, 3), "ev_best": round(ev_best, 3),
                     "diff": round(ev_act - ev_best, 3),
                     "best_order": [players[i]["name"] for i in best],
                     "ev_bestmem": round(ev_bm, 3) if ev_bm else None,
                     "bestmem_in": [f"{nm}({g})" for nm, g in swaps_in],
+                    "pinch_ace": pinch_ace,
                     "bench_best": list(bench_best) if bench_best else None})
     return out
 

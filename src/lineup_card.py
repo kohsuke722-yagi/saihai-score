@@ -46,6 +46,8 @@ def insights(r):
         out.append(("good", f"出塁率上位3人を上位打順に集約(平均{avg_slot:.1f}番)"))
     else:
         out.append(("info", f"出塁率上位3人の平均打順は{avg_slot:.1f}番"))
+    if r.get("pinch_ace"):
+        out.append(("info", f"ベンチに代打の切り札: {r['pinch_ace']}(直近は守備起用なし・温存が合理的)"))
     if r.get("fixed") is not None:
         out.append(("info", f"{r['fixed'] + 1}番投手(セ方式)"))
     return out
