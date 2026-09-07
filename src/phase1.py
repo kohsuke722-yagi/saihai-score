@@ -64,6 +64,13 @@ try:
 except Exception:
     PCTX = {"tto": {}, "rest": {}, "appearances": {}}
 
+# ── 公示(fetch_kouji.py日次蓄積): 負傷交代の後追い検知(②-a Layer2)用 ──
+try:
+    with open(os.path.join(BASE, "data", "logs", "kouji.json"), encoding="utf-8") as _f:
+        KOUJI = json.load(_f)
+except Exception:
+    KOUJI = {"moves": {}}
+
 # ── 走力データ(runpower.py出力): "チーム名:選手名" → 走塁カウント ──
 try:
     with open(os.path.join(BASE, "data", "logs", "runpower.json"), encoding="utf-8") as _f:
@@ -128,6 +135,22 @@ def _has_game_tomorrow(team_name, asof):
     if tmr > _dt.date(2026, int(td[-1][:2]), int(td[-1][2:])):
         return True
     return tmr.strftime("%m%d") in td
+
+
+def removed_soon(team_name, short_name, mmdd, days=3):
+    """②-a Layer2: 選手がmmdd後days日以内に出場選手登録抹消されたか(公示kouji.json)"""
+    import datetime as _dt
+    tc = TEAM_NAME2CODE.get(team_name, "")
+    n0 = _norm_name(short_name)
+    if not n0:
+        return False
+    d0 = _dt.date(2026, int(mmdd[:2]), int(mmdd[2:]))
+    for k in range(1, days + 1):
+        dd = (d0 + _dt.timedelta(days=k)).strftime("%m%d")
+        for tm, nm in KOUJI.get("moves", {}).get(dd, {}).get("out", []):
+            if tm == tc and _norm_name(nm).startswith(n0):
+                return True
+    return False
 
 
 def bullpen_candidates(team_name, inning, entry_inning, ids, asof):
@@ -602,6 +625,14 @@ def analyze_ph(mmdd, gid):
             if r.get("bf_old", 0) == 0:
                 out.append({**r, "judge": "none", "decision": None, "accident": True,
                             "note": "1打者未満で降板=負傷・アクシデント交代(採点対象外)"})
+                continue
+            # ②-a Layer2: 回中降板×軽微被弾(出塁2以下)×少打者×数日内の抹消公示=負傷疑い。
+            # 好調時の途中降板+即抹消は戦術では説明しにくい外形(ローテ調整の抹消はbf>12で除外)
+            if (not r.get("at_head") and r.get("bf_old", 99) <= 12
+                    and sum(1 for c_ in (r.get("day_old") or []) if c_ in ONBASE_KEYS) <= 2
+                    and removed_soon(r["def_team"], r["old"], asof)):
+                out.append({**r, "judge": "none", "decision": None, "accident": True,
+                            "note": "回中降板+軽微被弾+数日内抹消(公示)=負傷疑い・採点対象外"})
                 continue
             # ── 3打者チェーン評価(通常継投と回頭「誰を出すか」の共有部品) ──
             def opt_dists(pdist_fn, thr_x):

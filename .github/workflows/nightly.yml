@@ -29,6 +29,8 @@ jobs:
         run: python3 src/fetch.py pbp $MMDD
       - name: 参照データ(ロスター+baseballdata犠打)
         run: python3 src/fetch_refs.py
+      - name: 公示(出場選手登録・抹消+一軍一覧の日次蓄積)
+        run: python3 src/fetch_kouji.py
       - name: DB再構築(palog→retab→pitcher_ctx→runpower→ph_calib→bunt_calib)
         run: |
           python3 src/palog.py
