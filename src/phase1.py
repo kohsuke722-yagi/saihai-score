@@ -129,6 +129,16 @@ def rest_streak(pid, asof):
     return s
 
 
+def load_mult(pid, asof):
+    """累積負荷乗数(9/7社長指摘・実測: 直近5日2登板以上は同一投手内で被出塁オッズ約+9%)。
+    連投streakより説明力が大きいため性能補正はこちらを使う。returns (乗数, 直近5日登板数)"""
+    import datetime as _dt
+    dates = set(PCTX.get("appearances", {}).get(pid, []))
+    d = _dt.date(2026, int(asof[:2]), int(asof[2:]))
+    n5 = sum(1 for k in range(1, 6) if (d - _dt.timedelta(days=k)).strftime("%m%d") in dates)
+    return PCTX.get("load", {}).get("b2p" if n5 >= 2 else "b01", 1.0), n5
+
+
 def _has_game_tomorrow(team_name, asof):
     """明日その チームの試合があるか(移動日・休み前の連投はコストゼロ)。範囲外は保守的に有り"""
     import datetime as _dt
@@ -753,9 +763,8 @@ def analyze_ph(mmdd, gid):
                                                         bench_map.get(r["def_team"]))) | {pid_nw}:
                         P_c = fetch_player(pid_c)
                         stk_c = rest_streak(pid_c, asof)
-                        rk_c = "fresh" if stk_c == 0 else ("r1" if stk_c == 1 else "r2")
                         pd_c = ob_mult(pitcher_dist2(pid_c, P_c, inning, asof),
-                                       PCTX["rest"].get(rk_c, 1.0))
+                                       load_mult(pid_c, asof)[0])
                         ds_c = opt_dists(lambda i2, _p=pd_c: _p, P_c.get("throws", "右"))
                         ev_c = ev_chain(ds_c)
                         if ev_c is None:
@@ -799,8 +808,8 @@ def analyze_ph(mmdd, gid):
                           for k2 in set(pd_old) | set(cnt)}
                 r["day_bf"] = len(day)
             streak = rest_streak(pid_new, asof)
-            rk = "fresh" if streak == 0 else ("r1" if streak == 1 else "r2")
-            pd_new_adj = ob_mult(pd_new, PCTX["rest"].get(rk, 1.0))
+            lm_new, n5_new = load_mult(pid_new, asof)
+            pd_new_adj = ob_mult(pd_new, lm_new)  # 性能補正=累積負荷(連投streakは可用性・バッジ用)
             bf0 = r.get("bf_old", 0)
 
             def ps_chain(ds, kk):
@@ -841,7 +850,8 @@ def analyze_ph(mmdd, gid):
             ev1_stay = ev_state(st, outs, ds_stay[0], adv=adv_r)
             ev1_new = ev_state(st, outs, ds_new[0], adv=adv_r)
             fc_new = future_cost(pd_new, streak, r["def_team"], asof)
-            rec = {**r, "judge": "RE", "streak_new": streak, "tto_old": min(3, bf0 // 9 + 1),
+            rec = {**r, "judge": "RE", "streak_new": streak, "load5_new": n5_new,
+                   "tto_old": min(3, bf0 // 9 + 1),
                    "old_throws": P_old.get("throws", "右"), "new_throws": P_new.get("throws", "右"),
                    "ev_stay": round(ev_stay, 3), "ev_new": round(ev_new, 3),
                    "future_cost_new": round(fc_new, 3),

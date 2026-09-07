@@ -57,6 +57,7 @@ def main():
     # 層別(同一投手内)集計: 「良い投手ほど3巡目まで投げる/連投させられる」選択バイアスを除去
     tto_p = {}    # pid -> {bucket: [ob, n]} 先発のみ
     rest_p = {}   # pid -> {bucket: [ob, n]} リリーフのみ
+    load_p = {}   # pid -> {b01/b2p: [ob, n]} 直近5日の登板数(累積負荷・9/7社長指摘)
     cross_p = {}  # pid -> {in1/inx: [ob, n]} リリーフの回またぎ
     appearances = {}
 
@@ -84,6 +85,8 @@ def main():
             while (d - datetime.timedelta(days=streak + 1)) in prev:
                 streak += 1
             entry_inn = clss[0][1]
+            n5 = sum(1 for k5 in range(1, 6)
+                     if (d - datetime.timedelta(days=k5)) in prev)
             for j, (cls, inn) in enumerate(clss):
                 if cls == "SH":
                     continue
@@ -98,6 +101,10 @@ def main():
                     rest_p.setdefault(pid, {}).setdefault(k, [0, 0])
                     rest_p[pid][k][0] += ob
                     rest_p[pid][k][1] += 1
+                    bl = "b2p" if n5 >= 2 else "b01"
+                    load_p.setdefault(pid, {}).setdefault(bl, [0, 0])
+                    load_p[pid][bl][0] += ob
+                    load_p[pid][bl][1] += 1
                     # 回またぎ: 登板した回(in1) vs 2イニング目以降(inx)
                     cx = "in1" if inn == entry_inn else "inx"
                     cross_p.setdefault(pid, {}).setdefault(cx, [0, 0])
@@ -142,6 +149,13 @@ def main():
         m, nb = (1.0, pooled(rest_p, k)[1]) if k == "fresh" else mh_or(rest_p, k, "fresh")
         out["rest"][k] = round(m, 4)
         r, n = pooled(rest_p, k)
+        print(f"  {label}: 被出塁{r:.3f} (n={n}) 乗数{m:.3f}")
+    out["load"] = {"b01": 1.0}
+    print("累積負荷(リリーフ・直近5日の登板数・同一投手内MH・基準=0-1登板):")
+    for k, label in (("b01", "0-1登板"), ("b2p", "2登板以上")):
+        m, nb = (1.0, pooled(load_p, k)[1]) if k == "b01" else mh_or(load_p, k, "b01")
+        out["load"][k] = round(m, 4)
+        r, n = pooled(load_p, k)
         print(f"  {label}: 被出塁{r:.3f} (n={n}) 乗数{m:.3f}")
     # ── 翌日可用性(リリーフ): 今日投げると明日(翌チーム試合日が連日の場合)投げる確率がどれだけ落ちるか
     # +リーグ平均リリーフ被打分布(起用価値の基準)
@@ -248,7 +262,7 @@ def main():
     print(f"回またぎ(リリーフ・同一投手内MH・基準=登板回): 登板回{r1_:.3f}(n={n1_}) "
           f"またぎ{rx_:.3f}(n={nx_}) 乗数{m_cx:.3f}")
     # 乗数は基準カテゴリ比。分布は全打席混合なので、リーグ構成比で平均1に正規化
-    for grp, strata in (("tto", tto_p), ("rest", rest_p)):
+    for grp, strata in (("tto", tto_p), ("rest", rest_p), ("load", load_p)):
         ws = {b: pooled(strata, b)[1] for b in out[grp]}
         tot = sum(ws.values())
         mean = sum(out[grp][b] * ws[b] for b in ws) / tot if tot else 1.0
