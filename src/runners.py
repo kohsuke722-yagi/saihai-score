@@ -73,8 +73,18 @@ def annotate(mmdd, gid):
     for e in events:
         if e["type"] == "pa":
             pas_by_half.setdefault((e["team"], e["inning"], e["half"]), []).append(e)
-    # 代走の適用点: 元選手が最後に塁上に現れた半回のみで差し替え(=退場後は常にサブ)
+    # 代走差し替えの適用開始点(9/7監査#2): 元選手が「最後に自分の打撃で出塁したハーフ」以降のみ。
+    # 従来は試合全体へ遡及適用され、序盤の出塁に幻の代走が発生していた(検出870件中421件が誤り)
+    last_reach = {}
+    for e in events:
+        if e["type"] != "pa":
+            continue
+        if any(k in e.get("result", "") for k in REACH):
+            nm = e["batter"].replace("代打・", "").strip()
+            if nm in subs:
+                last_reach[nm] = (e["inning"], 0 if e["half"] == "表" else 1)
     for key, pas in pas_by_half.items():
+        hidx = (key[1], 0 if key[2] == "表" else 1)
         bases = {"1": None, "2": None, "3": None}
         for i, e in enumerate(pas):
             st = e["runners"]
@@ -91,10 +101,11 @@ def annotate(mmdd, gid):
                         bases[b] = None  # 出所不明の走者
                     if b not in obs:
                         bases[b] = None
-            # 代走差し替え(塁上の選手にサブがいれば即適用: 適用点は最後の出塁=退場なので安全)
+            # 代走差し替え(元選手の最終出塁ハーフ以降のみ適用)
             for b in "123":
-                if bases[b] in subs:
-                    bases[b] = subs[bases[b]]
+                nm0 = bases[b]
+                if nm0 in subs and hidx >= last_reach.get(nm0, (0, 0)):
+                    bases[b] = subs[nm0]
             e["bases"] = dict(bases)
             for b in obs:
                 if bases[b] is None:

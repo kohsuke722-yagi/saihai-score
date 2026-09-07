@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """選手成績の取得・キャッシュ・分布化(NPB公式選手ページ)"""
+import datetime
 import os, re, json, time, urllib.request
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +24,8 @@ def fetch_player(pid: str) -> dict:
     name = name_m.group(1).strip().replace("　", "") if name_m else pid
     hand = re.search(r"(右|左|両)投(右|左|両)打", html)
     throws, bats = (hand.group(1), hand.group(2)) if hand else ("右", "右")
-    out = {"pid": pid, "name": name, "throws": throws, "bats": bats, "bat": None, "pit": None}
+    out = {"pid": pid, "name": name, "throws": throws, "bats": bats, "bat": None, "pit": None,
+           "fetched": datetime.date.today().strftime("%m%d")}  # 未来参照遮断用(9/7監査#5)
     # 2026年行(寛容パース)。投手成績は2trに分割されているため後続行を連結する
     for mm in re.finditer(r'2026\s*</td>\s*<td class="team">[^<]*</td>((?:\s*<td[^>]*>.*?</td>)+?)\s*</tr>', html, re.S):
         cells = [strip_tags(c) for c in re.findall(r"(?s)<td[^>]*>(.*?)</td>", mm.group(1))]

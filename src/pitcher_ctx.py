@@ -46,7 +46,7 @@ def main():
         hand = {}
     # チーム→試合日(gid=home-away-NN から。raw∪イベントキャッシュ)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from analyze import iter_games, game_ids  # noqa
+    from analyze import iter_games, game_ids, game_ids2  # noqa
     team_dates = {}
     for mmdd, gid in iter_games():
         parts = gid.split("-")
@@ -75,7 +75,8 @@ def main():
         for i, mmdd in enumerate(dates):
             clss = by_date[mmdd]
             is_starter = clss[0][1] == 1
-            outs_day = sum((2 if c == "DP" else 1) for c, _ in clss if c not in ONBASE)
+            outs_day = sum((2 if c == "DP" else 1) for c, _ in clss
+                           if c not in ONBASE and c != "IBB")
             acc = eo["start" if is_starter else "relief"].setdefault(pid, [0, 0])
             acc[0] += outs_day
             acc[1] += 1
@@ -93,7 +94,7 @@ def main():
             prior30 = [g for g in td_p if g < mmdd][-30:]
             n30 = sum(1 for g in prior30 if g in aset) if len(prior30) >= 30 else 0
             for j, (cls, inn) in enumerate(clss):
-                if cls == "SH":
+                if cls in ("SH", "IBB"):  # 犠打と申告敬遠は投手の制球でない(9/7監査#14)
                     continue
                 ob = 1 if cls in ONBASE else 0
                 if is_starter:
@@ -179,7 +180,7 @@ def main():
         if len(relief_days) < len(dates) * 0.5:
             continue  # 主に先発の投手は除外
         for mmdd, cls, inning, st, outs in rows:
-            if mmdd in relief_days and cls != "SH":
+            if mmdd in relief_days and cls not in ("SH", "IBB"):
                 k = cls if cls in ("BB", "HBP", "K", "1B", "2B", "3B", "HR") else "OUT"
                 relief_avg[k] = relief_avg.get(k, 0) + 1
         # 主力リリーフ(登板15日+)に限定=使用頻度バイアスを抑えて「連投状況→翌日登板率」を測る
@@ -230,6 +231,7 @@ def main():
             except Exception:
                 continue
             ids = game_ids(mmdd, gid)
+            ids2 = game_ids2(mmdd, gid)
             away = next((e["team"] for e in events if e["half"] == "表"), None)
             home = next((e["team"] for e in events if e["half"] == "裏"), None)
             cur = {}
@@ -238,7 +240,7 @@ def main():
                 if e["type"] == "pitching":
                     m = _re.search(r"先発投手[）)]?\s*(\S+)", e["text"]) or _re.search(r"→\s*(\S+)", e["text"])
                     if m:
-                        cur[dfs] = ids.get(m.group(1))
+                        cur[dfs] = (ids2.get(dfs) or {}).get(m.group(1)) or ids.get(m.group(1))
                     continue
                 if e["type"] != "pa" or not cur.get(dfs):
                     continue

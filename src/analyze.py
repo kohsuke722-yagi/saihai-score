@@ -186,6 +186,20 @@ def game_ids(mmdd, gid):
         return json.load(f)["ids"]
 
 
+def game_ids2(mmdd, gid):
+    """チーム別の 選手名→ID(9/7監査#1: 両チーム同姓の衝突対策)。
+    {チーム名: {名前: pid}}。旧形式キャッシュ(ids2なし)は空dict=呼び出し側で平坦にフォールバック"""
+    path = os.path.join(RAW, mmdd, gid, "playbyplay.html")
+    cachep = os.path.join(EVDIR, mmdd, f"{gid}.json")
+    if os.path.exists(path):
+        parse_game(mmdd, gid)  # 最新形式でキャッシュ再生成(ids2を焼き込む)
+    try:
+        with open(cachep, encoding="utf-8") as f:
+            return json.load(f).get("ids2", {}) or {}
+    except Exception:
+        return {}
+
+
 def game_subs(mmdd, gid):
     """box.html由来の代走差し替え表(キャッシュ側)。呼び出し元はraw優先で使う"""
     try:
@@ -216,6 +230,36 @@ def iter_games():
     return sorted(seen)
 
 
+def _box_linescore(mmdd, gid):
+    """box.htmlのイニング別得点 {(回, 表/裏): 得点}。無ければ空(9/7監査#4: 簿記検算用)"""
+    path = os.path.join(RAW, mmdd, gid, "box.html")
+    if not os.path.exists(path):
+        return {}
+    plain = re.sub(r"<[^>]+>", " ", open(path, encoding="utf-8").read())
+    plain = re.sub(r"[\s　]+", " ", plain.replace("&nbsp;", " "))
+    if "計 H E" not in plain:
+        return {}
+    mt = re.search(r"】 (\S+?) vs (\S+?) \d+回戦", plain)
+    if not mt:
+        return {}
+    ls = {}
+    for full, half in ((mt.group(2), "表"), (mt.group(1), "裏")):  # NPB表記はhome vs away
+        try:
+            i = plain.index(full + " ", plain.index("計 H E"))
+        except ValueError:
+            return {}
+        toks = []
+        for t in plain[i + len(full):].split()[:22]:
+            if re.fullmatch(r"\d+[xX]?|[xX]", t):
+                toks.append(t)
+            elif toks:
+                break
+        for inn, t in enumerate(toks[:-3], start=1):  # 末尾3つは計/H/E
+            if t not in ("x", "X"):
+                ls[(inn, half)] = int(re.sub(r"[xX]", "", t))
+    return ls
+
+
 def parse_game(mmdd, gid):
     path = os.path.join(RAW, mmdd, gid, "playbyplay.html")
     cachep = os.path.join(EVDIR, mmdd, f"{gid}.json")
@@ -228,6 +272,7 @@ def parse_game(mmdd, gid):
     halves = re.split(r"<h5[^>]*>", html)[1:]
     events = []      # 全打席イベント
     unknowns = []    # 解析不能行(正直記録)
+    ids2_raw = []    # (攻撃チーム, 守備側の行か, [(pid,名前)]) → 後段でチーム別ids2へ(9/7監査#1)
     for h in halves:
         m = re.match(r"(\d+)回(表|裏)（(.+?)の攻撃）", strip_tags(h[:200]))
         if not m:
@@ -238,6 +283,11 @@ def parse_game(mmdd, gid):
         half_events = []
         for row in rows:
             txt = strip_tags(row)
+            links = re.findall(r'href="/bis/players/(\d+)\.html">([^<]+)</a>', row)
+            if links:
+                is_def = ("投手交代" in txt or "先発投手" in txt
+                          or "守備交代" in txt or "守備変更" in txt)
+                ids2_raw.append((team, is_def, links))
             cells = re.findall(r'(?s)<td[^>]*>(.*?)</td>', row)
             cells = [strip_tags(c) for c in cells]
             if not cells:
@@ -271,10 +321,12 @@ def parse_game(mmdd, gid):
                 unknowns.append(f"{inning}回{half}: {txt[:60]}")
         # ΔREの簿記(次の打席行の状態と比較)
         pas = [e for e in half_events if e["type"] == "pa"]
-        NONPA = ("盗塁", "牽制", "暴投", "ワイルドピッチ", "ボーク", "パスボール")
+        NONPA = ("盗塁", "牽制", "暴投", "ワイルドピッチ", "ボーク", "パスボール", "途中")
         for i, pa in enumerate(pas):
-            # 盗塁等は打席完了ではない=簿記に「打者+1」を入れない
-            batter_done = 0 if any(k in pa["result"] for k in NONPA) else 1
+            # 盗塁等は打席完了ではない=簿記に「打者+1」を入れない。
+            # 振り逃げは括弧内に暴投/捕逸を含むが打席完了(9/7監査#16の幽霊run対策)
+            batter_done = 1 if "振り逃げ" in pa["result"] \
+                else (0 if any(k in pa["result"] for k in NONPA) else 1)
             if i + 1 < len(pas):
                 nxt = pas[i + 1]
                 d_outs = nxt["outs"] - pa["outs"]
@@ -291,17 +343,54 @@ def parse_game(mmdd, gid):
                 pa["dRE"] = 0.0 - re_of(pa["runners"], pa["outs"]) + runs
                 pa["end"] = True
         events.extend(half_events)
+    # ── 簿記の検算(9/7監査#4): box.htmlのイニング別得点と照合し、残差は末尾打席へ帰属 ──
+    # (保存則簿記は暴投得点・最終打席の近似で半回あたり±1点ずれることがある。真値=公式線スコア)
+    ls = _box_linescore(mmdd, gid)
+    if ls:
+        by_half = {}
+        for e in events:
+            if e["type"] == "pa":
+                by_half.setdefault((e["inning"], e["half"]), []).append(e)
+        for key, pas_h in by_half.items():
+            truth = ls.get(key)
+            if truth is None:
+                continue
+            diff_r = truth - sum(p.get("runs", 0) for p in pas_h)
+            if diff_r > 0:  # 過小計上(暴投得点等の取りこぼし)→末尾打席へ
+                last = pas_h[-1]
+                last["runs"] = last.get("runs", 0) + diff_r
+                last["dRE"] = last.get("dRE", 0.0) + diff_r
+            elif diff_r < 0:  # 過大計上(幽霊run等)→後方から差し引き
+                need = -diff_r
+                for p_ in reversed(pas_h):
+                    take = min(need, p_.get("runs", 0))
+                    if take:
+                        p_["runs"] -= take
+                        p_["dRE"] = p_.get("dRE", 0.0) - take
+                        need -= take
+                    if not need:
+                        break
     # キャッシュ書き出し(dREを除いた素の事実のみ+ids+代走差し替え表)
     try:
         from runners import parse_box_subs  # 遅延import(循環回避)
         subs = parse_box_subs(mmdd, gid)
     except Exception:
         subs = {}
+    # チーム別ids2の構築: 打席系の行=攻撃側・投手/守備系の行=守備側に帰属(9/7監査#1)
+    away_t = next((e["team"] for e in events if e["half"] == "表"), None)
+    home_t = next((e["team"] for e in events if e["half"] == "裏"), None)
+    ids2 = {}
+    if away_t and home_t:
+        ids2 = {away_t: {}, home_t: {}}
+        for atk, is_def, links in ids2_raw:
+            owner = (home_t if atk == away_t else away_t) if is_def else atk
+            for pid, nm in links:
+                ids2.setdefault(owner, {})[nm.strip()] = pid
     ce = [{k: v for k, v in e.items() if k != "dRE"} for e in events]
     os.makedirs(os.path.dirname(cachep), exist_ok=True)
     with open(cachep, "w", encoding="utf-8") as f:
         json.dump({"events": ce, "unknowns": unknowns, "ids": _ids_from_html(html),
-                   "subs": subs}, f, ensure_ascii=False)
+                   "ids2": ids2, "subs": subs}, f, ensure_ascii=False)
     return events, unknowns
 
 

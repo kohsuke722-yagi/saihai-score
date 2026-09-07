@@ -131,6 +131,8 @@ def batter_dist2(pid, P, asof):
         return dict(PITCHER_BAT)
     rows = blog.get(pid, [])
     sc, sn = _season_bat_counts(b) if b else (None, 0)
+    if sc is not None and asof < P.get("fetched", "0907"):
+        sc, sn = None, 0  # スナップショットにasof以降の未来打席が混入するため不使用(9/7監査#5)
     if not rows and not b:
         return dict(LEAGUE)
     d, n_eff = _decayed(rows, asof, sc, sn, HALF_BAT)
@@ -143,6 +145,8 @@ def pitcher_dist2(pid, P, inning, asof):
     q = P.get("pit")
     rows = plog.get(pid, [])
     sc, sn = _season_pit_counts(q) if q and q["TBF"] >= 20 else (None, 0)
+    if sc is not None and asof < P.get("fetched", "0907"):
+        sc, sn = None, 0  # 未来参照遮断(9/7監査#5)
     if not rows and not sc:
         return dict(LEAGUE)
     overall, n_eff = _decayed(rows, asof, sc, sn, HALF_PIT)
@@ -158,10 +162,11 @@ def pitcher_dist2(pid, P, inning, asof):
 
 
 def effective_n(pid, kind, asof):
-    """説明用: その選手の有効サンプル数"""
+    """説明用: その選手の有効サンプル数(較正済み半減期を使用・9/7監査#27)"""
     blog, plog = _load()
     rows = (blog if kind == "b" else plog).get(pid, [])
-    return sum(_w(asof, r[0]) for r in rows if _days(asof, r[0]) > 0)
+    h = HALF_BAT if kind == "b" else HALF_PIT
+    return sum(_w(asof, r[0], h) for r in rows if _days(asof, r[0]) > 0)
 
 
 GB_SHRINK = 40.0        # ゴロ率の自立インプレーアウト数(較正予定)

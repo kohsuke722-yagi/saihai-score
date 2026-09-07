@@ -11,7 +11,7 @@ import os, re, json, sys
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from analyze import parse_game, game_ids, iter_games  # noqa
+from analyze import parse_game, game_ids, game_ids2, iter_games  # noqa
 
 RAW = os.path.join(BASE, "data", "raw")
 LOGS = os.path.join(BASE, "data", "logs")
@@ -23,6 +23,8 @@ NONPA = ("盗塁", "牽制", "暴投", "ワイルドピッチ", "ボーク", "�
 
 
 def classify(res: str):
+    if "振り逃げ" in res:
+        return "K"  # 括弧内の暴投/捕逸表記でNONPAに落ちていた(9/7監査#16)。記録は三振=標準準拠
     if any(k in res for k in NONPA):
         return None
     if "犠牲バント" in res or "犠打" in res or "スリーバント" in res:
@@ -35,7 +37,9 @@ def classify(res: str):
         return "2B"
     if "三振" in res:
         return "K"
-    if "敬遠" in res or "四球" in res or "フォアボール" in res:
+    if "敬遠" in res:
+        return "IBB"  # 申告敬遠=監督の指示であり投手の制球でない→分布・較正から除外(9/7監査#14)
+    if "四球" in res or "フォアボール" in res:
         return "BB"
     if "死球" in res or "デッドボール" in res:
         return "HBP"
@@ -81,6 +85,10 @@ def build():
                 continue
             n_games += 1
             ids = game_ids(mmdd, gid)
+            ids2 = game_ids2(mmdd, gid)
+
+            def rid(tm, nm):  # チーム文脈つきID解決(同姓衝突対策・9/7監査#1)
+                return (ids2.get(tm) or {}).get(nm) or ids.get(nm)
             away = next((e["team"] for e in events if e["half"] == "表"), None)
             home = next((e["team"] for e in events if e["half"] == "裏"), None)
             cur_p = {}
@@ -129,11 +137,11 @@ def build():
                 bname = e["batter"].replace("代打・", "").strip()
                 if bname.startswith("（"):
                     continue
-                bid = ids.get(bname)
+                bid = rid(e["team"], bname)
                 if bid:
                     batters.setdefault(bid, []).append([mmdd, cls, st, outs])
                 pname = cur_p.get(defense)
-                pid = ids.get(pname) if pname else None
+                pid = rid(defense, pname) if pname else None
                 if pid:
                     pitchers.setdefault(pid, []).append([mmdd, cls, e["inning"], st, outs])
             # 1B時のr1→3塁判定(次の打席行の状態を見る)

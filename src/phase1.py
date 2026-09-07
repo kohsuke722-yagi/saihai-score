@@ -200,33 +200,31 @@ def removed_soon(team_name, short_name, mmdd, days=3):
     if not n0:
         return False
     d0 = _dt.date(2026, int(mmdd[:2]), int(mmdd[2:]))
+    hits = set()
     for k in range(1, days + 1):
         dd = (d0 + _dt.timedelta(days=k)).strftime("%m%d")
         for tm, nm in KOUJI.get("moves", {}).get(dd, {}).get("out", []):
             if tm == tc and _norm_name(nm).startswith(n0):
-                return True
-    return False
+                hits.add(nm)
+    return len(hits) == 1  # 同姓複数の抹消は誤帰属を避けて不発火(9/7監査#15)
 
 
-def bullpen_candidates(team_name, inning, entry_inning, ids, asof, bench=None):
+def bullpen_candidates(team_name, used, asof, bench=None):
     """②-d: その日使えた自軍リリーフ候補pidの列挙(design-model-v2.md)。
     第一候補ソース=当日ベンチ実名簿(roster.html・9/7社長指摘で導入)。無い場合のみ
-    従来の推定(公示名簿→直近14日登板+ローテ除外)。共通: 登板済み・3連投+は除外"""
+    従来の推定(公示名簿→直近14日登板+ローテ除外)。共通: 登板済み(used)・3連投+は除外"""
     import datetime as _dt
     tc = TEAM_NAME2CODE.get(team_name, "")
     eo_r = PCTX.get("e_outs", {}).get("relief", {})
-    used = {ids.get(nm) for nm, inn in entry_inning.items() if inn <= inning}
     d0 = _dt.date(2026, int(asof[:2]), int(asof[2:]))
     if bench:
         # 実名簿モード: ベンチ入り投手のみが候補(休養中のローテ組はそもそもベンチ外)
         cands = []
         for nm in bench:
-            pid = ids.get(nm)
-            if not pid:
-                n0 = _norm_name(nm)  # 登板しなかった投手はplaybyplayにリンク無し→名簿から解決
-                hits = [p for p, d in _HAND.items()
-                        if d.get("team") == tc and _norm_name(d.get("name", "")).startswith(n0)]
-                pid = hits[0] if len(hits) == 1 else None
+            n0 = _norm_name(nm)  # 全選手名簿(handedness)からチーム+前方一致(一意のみ)で解決
+            hits = [p for p, d in _HAND.items()
+                    if d.get("team") == tc and _norm_name(d.get("name", "")).startswith(n0)]
+            pid = hits[0] if len(hits) == 1 else None
             if not pid or pid in used or rest_streak(pid, asof) >= 2:
                 continue
             cands.append(pid)
@@ -473,6 +471,15 @@ def is_pitcher_bat(P):
 def analyze_ph(mmdd, gid):
     events, _ = annotate(mmdd, gid)  # 走者簿記付き(runners.py)
     ids = name_ids(mmdd, gid)
+    from analyze import game_ids2
+    ids2 = game_ids2(mmdd, gid)
+
+    def pid_of(tm, nm):
+        """チーム文脈つき選手ID解決(9/7監査#1: 両チーム同姓の衝突対策)"""
+        nm2 = (nm or "").replace("代打・", "").strip()
+        if not nm2:
+            return None
+        return (ids2.get(tm) or {}).get(nm2) or ids.get(nm2)
     subs = parse_box_subs(mmdd, gid)          # 元選手→代走
     subs_rev = {v: k for k, v in subs.items()}  # 代走→元選手
     asof = mmdd
@@ -502,19 +509,20 @@ def analyze_ph(mmdd, gid):
             m = re.search(r"先発投手[）)]?\s*(\S+)", t)
             if m:
                 cur_pitcher[defense] = m.group(1)
-                entry_inning[m.group(1)] = 1
+                entry_inning[f"{defense}|{m.group(1)}"] = 1  # 同名投手対策でチーム修飾(9/7監査#12)
             m = re.search(r"→\s*(\S+)", t)
             if m:
                 old, new = cur_pitcher.get(defense), m.group(1)
                 if old and old != new:
+                    ok = f"{defense}|{old}"
                     pending_change.append({"kind": "relief", "def_team": defense,
-                                           "old": old, "new": new, "bf_old": bf.get(old, 0),
-                                           "old_entry": entry_inning.get(old, 1),
-                                           "day_old": list(day_pa.get(old, [])),
+                                           "old": old, "new": new, "bf_old": bf.get(ok, 0),
+                                           "old_entry": entry_inning.get(ok, 1),
+                                           "day_old": list(day_pa.get(ok, [])),
                                            "at_head": half_pa.get((e["inning"], e["half"]), 0) == 0,
                                            "inning": e["inning"], "half": e["half"]})
                 cur_pitcher[defense] = new
-                entry_inning[new] = e["inning"]
+                entry_inning[f"{defense}|{new}"] = e["inning"]
             continue
         if e["type"] != "pa":
             continue
@@ -522,15 +530,22 @@ def analyze_ph(mmdd, gid):
         half_pa[(e["inning"], e["half"])] = half_pa.get((e["inning"], e["half"]), 0) + 1
         diff = score[team] - score[defense]  # 指示時点の点差(攻撃側視点)
         score[team] += e.get("runs", 0)
-        if bat.startswith("（走者") or "盗塁" in e.get("result", ""):
+        # 打席でない行の除外(9/7監査#3: 牽制=打者空文字・途中交代・走者イベントが
+        # 打順スロット/bf/day_paを壊していた)。振り逃げは括弧内表記があっても打席完了
+        res_row = e.get("result", "")
+        if "振り逃げ" not in res_row and (
+                not bat or bat.startswith("（")
+                or any(k in res_row for k in ("盗塁", "牽制", "暴投", "ワイルドピッチ",
+                                              "ボーク", "パスボール", "途中"))):
             continue
         s = seq[team] % 9
         seq[team] += 1
         nxt = slots[team].get((s + 1) % 9)
-        bf[cur_pitcher.get(defense, "")] = bf.get(cur_pitcher.get(defense, ""), 0) + 1
-        cls_day = classify(e.get("result", ""))
-        if cls_day and cls_day not in ("SH", "?"):
-            day_pa.setdefault(cur_pitcher.get(defense, ""), []).append(
+        pk = f"{defense}|{cur_pitcher.get(defense, '')}"
+        bf[pk] = bf.get(pk, 0) + 1
+        cls_day = classify(res_row)
+        if cls_day and cls_day not in ("SH", "?", "IBB"):  # 申告敬遠は投手の出来でない(監査#14)
+            day_pa.setdefault(pk, []).append(
                 "OUT" if cls_day in ("DP", "OUT_G", "OUT_A", "OUT") else cls_day)
         while pending_change:
             pc_ = pending_change.pop(0)
@@ -566,7 +581,16 @@ def analyze_ph(mmdd, gid):
                             "outs": e["outs"], "state": e["runners"], "batter": bat,
                             "diff": diff, "next": nxt, "bases": e.get("bases"),
                             "pitcher": cur_pitcher.get(defense)})
-            slots[team][s] = bat
+            if bat.startswith("代打"):  # 代打にバントさせた場合も代打采配を計上(9/7監査#11)
+                ph_name = bat.replace("代打・", "").strip()
+                results.append({"kind": "ph", "inning": e["inning"], "half": e["half"],
+                                "team": team, "slot": s + 1, "outs": e["outs"],
+                                "state": e["runners"], "ph": ph_name,
+                                "orig": slots[team].get(s), "next": nxt, "diff": diff,
+                                "bases": e.get("bases"), "pitcher": cur_pitcher.get(defense)})
+                slots[team][s] = ph_name
+            else:
+                slots[team][s] = bat
             continue
         if (e["outs"] <= 1 and e["runners"] in ("1", "2", "12")
                 and "敬遠" not in res and not bat.startswith("代打")):
@@ -592,7 +616,8 @@ def analyze_ph(mmdd, gid):
     out = []
     for r in results:
         st, outs, inning = r["state"], r["outs"], r["inning"]
-        pid_pi = ids.get(r["pitcher"]) if r.get("pitcher") else None
+        dteam = r.get("def_team") or (home if r.get("team") == away else away)
+        pid_pi = pid_of(dteam, r["pitcher"]) if r.get("pitcher") else None
         P_pi = fetch_player(pid_pi) if pid_pi else None
         pdist = pitcher_dist2(pid_pi, P_pi, inning, asof) if P_pi else dict(LEAGUE)
         thr = P_pi["throws"] if P_pi else "右"
@@ -602,7 +627,7 @@ def analyze_ph(mmdd, gid):
 
         # 次打者の継続評価(実打順)。不明ならRE表=リーグ平均
         nxt_name = (r.get("next") or "").replace("代打・", "").strip()
-        pid_n = ids.get(nxt_name) if nxt_name else None
+        pid_n = pid_of(r.get("team"), nxt_name) if nxt_name else None
         if pid_n:
             P_n = fetch_player(pid_n)
             dist_n = full(P_n, pid_n)
@@ -653,17 +678,21 @@ def analyze_ph(mmdd, gid):
             def fuzzy_id(nm):
                 if not nm:
                     return None
-                hit = ids.get(nm) or next((v for k2, v in ids.items()
-                                           if k2.startswith(nm) or nm.startswith(k2)), None)
+                hit = pid_of(r["team"], nm)
                 if hit:
                     return hit
+                pool = ids2.get(r["team"]) or ids
+                hits = sorted({v for k2, v in pool.items()
+                               if k2.startswith(nm) or nm.startswith(k2)})
+                if len(hits) == 1:  # 曖昧(牧/牧野等)は誤帰属より不明を選ぶ(9/7監査#15)
+                    return hits[0]
                 # 打席が無い代走はplaybyplayにリンクが無い→全選手名簿(handedness)から補完
                 n0 = _norm_name(nm)
-                return next((pid0 for pid0, d0 in _HAND.items()
-                             if d0.get("team") == tc_ and _norm_name(d0.get("name", "")).startswith(n0)),
-                            None)
+                hh = sorted({pid0 for pid0, d0 in _HAND.items()
+                             if d0.get("team") == tc_ and _norm_name(d0.get("name", "")).startswith(n0)})
+                return hh[0] if len(hh) == 1 else None
             pid_sub, pid_or = fuzzy_id(r["sub"]), fuzzy_id(r["orig"])
-            pid_at = ids.get(r["batter"].replace("代打・", "").strip())
+            pid_at = pid_of(r["team"], r["batter"])
             if not pid_sub or not pid_at:
                 out.append({**r, "error": f"ID不明 sub={pid_sub} bat={pid_at}"})
                 continue
@@ -682,7 +711,9 @@ def analyze_ph(mmdd, gid):
                 P_or = fetch_player(pid_or)
                 P_sub = fetch_player(pid_sub)
                 d_or0, d_sub0 = batter_dist2(pid_or, P_or, asof), batter_dist2(pid_sub, P_sub, asof)
-                rem = max(0, 9 - inning)
+                # 同点・僅差の終盤は延長12回まで見据える(9/7監査#13: 9回・延長の代走で機会費用が0だった)
+                horizon = 12 if (inning >= 9 and abs(r.get("diff") or 0) <= 1) else 9
+                rem = max(0, horizon - inning)
                 ahead = (r["slot_orig"] - r["slot_cur"]) % 9
                 exp_pa = max(0.0, (rem * 4.3 - ahead) / 9.0)
                 opp = exp_pa * max(0.0, (ev_state("", 0, d_or0) - ev_state("", 0, d_sub0)))
@@ -722,8 +753,7 @@ def analyze_ph(mmdd, gid):
             def opt_dists(pdist_fn, thr_x):
                 ds = []
                 for idx, nm in enumerate((r.get("batter"), r.get("next"), r.get("next2"))):
-                    nm2 = (nm or "").replace("代打・", "").strip()
-                    pidb = ids.get(nm2) if nm2 else None
+                    pidb = pid_of(r["team"], nm)
                     if not pidb:
                         ds.append(None)
                         continue
@@ -753,7 +783,7 @@ def analyze_ph(mmdd, gid):
             if r.get("old_entry", 1) > 1 and r.get("at_head"):
                 rec0 = {**r, "judge": "none", "decision": None,
                         "note": "回頭リリーフ交代(カード外・②-d起用差の並走評価)"}
-                pid_nw = ids.get(r["new"])
+                pid_nw = pid_of(r["def_team"], r["new"])
                 if pid_nw:
                     P_nw = fetch_player(pid_nw)
                     stk = rest_streak(pid_nw, asof)
@@ -761,9 +791,13 @@ def analyze_ph(mmdd, gid):
                     rec0["usage_cost_new"] = round(
                         future_cost(pitcher_dist2(pid_nw, P_nw, inning, asof), stk,
                                     r["def_team"], asof), 3)
+                    used_ = set()
+                    for k_, inn_ in entry_inning.items():
+                        tm_, _, nm_ = k_.partition("|")
+                        if tm_ == r["def_team"] and inn_ <= inning:
+                            used_.add(pid_of(tm_, nm_))
                     evals, wvals = {}, {}
-                    for pid_c in set(bullpen_candidates(r["def_team"], inning, entry_inning,
-                                                        ids, asof,
+                    for pid_c in set(bullpen_candidates(r["def_team"], used_, asof,
                                                         bench_map.get(r["def_team"]))) | {pid_nw}:
                         P_c = fetch_player(pid_c)
                         stk_c = rest_streak(pid_c, asof)
@@ -793,7 +827,7 @@ def analyze_ph(mmdd, gid):
                             rec0["decision_head_wp"] = round(wvals[bw] - wvals[pid_nw], 4)
                 out.append(rec0)
                 continue
-            pid_old, pid_new = ids.get(r["old"]), ids.get(r["new"])
+            pid_old, pid_new = pid_of(r["def_team"], r["old"]), pid_of(r["def_team"], r["new"])
             if not pid_old or not pid_new:
                 out.append({**r, "error": f"投手ID不明 {r['old']}/{r['new']}"})
                 continue
@@ -811,6 +845,8 @@ def analyze_ph(mmdd, gid):
                 pd_old = {k2: (1 - w_day) * pd_old.get(k2, 0.0) + w_day * cnt.get(k2, 0) / len(day)
                           for k2 in set(pd_old) | set(cnt)}
                 r["day_bf"] = len(day)
+            if r.get("old_entry", 1) > 1:  # 続投リリーフにも負荷補正(9/7監査#9: 新投手側との非対称解消)
+                pd_old = ob_mult(pd_old, load_mult(pid_old, asof)[0])
             streak = rest_streak(pid_new, asof)
             lm_new, n5_new, n30_new = load_mult(pid_new, asof)
             pd_new_adj = ob_mult(pd_new, lm_new)  # 性能補正=負荷2軸(連投streakは可用性・バッジ用)
@@ -864,7 +900,7 @@ def analyze_ph(mmdd, gid):
                    "decision_net": round(ev_stay - ev_new - fc_new, 3)}
             # 左対左ワンポイント外形なら1打者評価を主に(NPBは3打者ルール無し)
             def bats_of(nm):
-                pidb = ids.get((nm or "").replace("代打・", "").strip())
+                pidb = pid_of(r["team"], nm)
                 return fetch_player(pidb).get("bats") if pidb else None
             if (not r.get("at_head") and P_new.get("throws") == "左"
                     and bats_of(r.get("batter")) == "左"):
@@ -890,7 +926,7 @@ def analyze_ph(mmdd, gid):
             continue
 
         if r["kind"] == "ibb":
-            pid_b = ids.get(r["batter"].replace("代打・", "").strip())
+            pid_b = pid_of(r["team"], r["batter"])
             if not pid_b:
                 out.append({**r, "error": "打者ID不明"})
                 continue
@@ -903,7 +939,7 @@ def analyze_ph(mmdd, gid):
             walk_runs = 1 if (r1 and r2 and r3) else 0
             st2 = "1" + ("2" if (r2 or r1) else "") + ("3" if (r3 or (r1 and r2)) else "")
             nxt2_name = (r.get("next2") or "").replace("代打・", "").strip()
-            pid_n2 = ids.get(nxt2_name) if nxt2_name else None
+            pid_n2 = pid_of(r["team"], nxt2_name) if nxt2_name else None
             d_n2 = full(fetch_player(pid_n2), pid_n2) if pid_n2 else None
             cont2 = (lambda s2, o2, _d=d_n2: ev_state(s2, o2, _d)) if d_n2 is not None else None
             if pid_n:
@@ -944,7 +980,7 @@ def analyze_ph(mmdd, gid):
             continue
 
         if r["kind"] in ("bunt", "squeeze", "swing"):
-            pid_b = ids.get(r["batter"].replace("代打・", "").strip())
+            pid_b = pid_of(r["team"], r["batter"])
             if not pid_b:
                 out.append({**r, "error": "打者ID不明"})
                 continue
@@ -1038,7 +1074,8 @@ def analyze_ph(mmdd, gid):
             continue
 
         # 代打
-        pid_ph, pid_or = ids.get(r["ph"]), ids.get(r["orig"]) if r["orig"] else None
+        pid_ph = pid_of(r["team"], r["ph"])
+        pid_or = pid_of(r["team"], r["orig"]) if r["orig"] else None
         if not pid_ph or not pid_or:
             out.append({**r, "error": f"ID不明 ph={pid_ph} orig={pid_or}"})
             continue
