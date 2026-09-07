@@ -31,12 +31,12 @@ def run(script, *args):
     return r.returncode == 0
 
 
-def commit_marker(mmdd, gid):
+def commit_marker(mmdd, gid, note="posted"):
     """マーカーをcommit&push。Actions外(ローカルテスト)ではスキップ"""
     mp = os.path.join(BASE, "data", "posted", mmdd, gid)
     os.makedirs(os.path.dirname(mp), exist_ok=True)
     with open(mp, "w", encoding="utf-8") as f:
-        f.write(datetime.datetime.now(JST).isoformat())
+        f.write(f"{note} {datetime.datetime.now(JST).isoformat()}")
     if not os.environ.get("GITHUB_ACTIONS"):
         print("(local) マーカー書き込みのみ・commit省略")
         return
@@ -46,7 +46,7 @@ def commit_marker(mmdd, gid):
     g("config", "user.email", "actions@users.noreply.github.com")
     for attempt in range(5):  # 同時終了した他試合ジョブとのpush競合をリトライで解決
         g("add", "data/posted", "data/players")
-        g("commit", "-m", f"posted: {mmdd} {gid}")
+        g("commit", "-m", f"{note}: {mmdd} {gid}")
         g("pull", "--rebase")
         r = g("push")
         if r.returncode == 0:
@@ -71,6 +71,10 @@ def main():
         except Exception as e:
             print(f"fetch err: {e}", flush=True)
             box, done = None, False
+        if box and "中止】" in box:  # 【雨天のため中止】等。マーカーを残して以降の便のジョブも止める
+            print(f"{gid}: 中止検知→カード無しで退出", flush=True)
+            commit_marker(mmdd, gid, note="中止")
+            return
         print(f"{gid}: {'終了!' if done else '試合中/未開始...'}", flush=True)
         if done:
             save(os.path.join(RAW, mmdd, gid, "box.html"), box)
