@@ -61,6 +61,7 @@ def main():
     appearances = {}
 
     eo = {"start": {}, "relief": {}}  # 1登板あたり奪アウト数(②-bロングリリーフ設計の部品)
+    starts = {}                       # pid→先発日リスト(ローテ組をブルペン候補から外す用)
     for pid, rows in pitchers.items():
         by_date = {}
         for mmdd, cls, inning, st, outs in rows:
@@ -74,6 +75,8 @@ def main():
             acc = eo["start" if is_starter else "relief"].setdefault(pid, [0, 0])
             acc[0] += outs_day
             acc[1] += 1
+            if is_starter:
+                starts.setdefault(pid, []).append(mmdd)  # 先発した日(②-d候補の役割判定用)
             # 連投streak: 昨日から遡って連続登板日数
             streak = 0
             d = d_of(mmdd)
@@ -179,6 +182,7 @@ def main():
     tot_ra = sum(relief_avg.values())
     out["e_outs"] = {role: {pid: round(v[0] / v[1], 2) for pid, v in d.items() if v[1]}
                      for role, d in eo.items()}
+    out["starts"] = starts
     r_all = [v for v in eo["relief"].values() if v[1]]
     out["e_outs"]["relief_mean"] = round(sum(v[0] for v in r_all) / sum(v[1] for v in r_all), 2) \
         if r_all else 3.0

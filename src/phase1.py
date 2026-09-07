@@ -172,16 +172,23 @@ def bullpen_candidates(team_name, inning, entry_inning, ids, asof):
     for pid, info in _HAND.items():
         if info.get("team") != tc or pid in used or pid not in eo_r:
             continue
+        past = [x for x in PCTX.get("appearances", {}).get(pid, []) if x < asof]
         if roster:
             if _norm_name(info.get("name", "")) not in roster:
                 continue
         else:
-            past = [x for x in PCTX.get("appearances", {}).get(pid, []) if x < asof]
             if not past:
                 continue
             last = _dt.date(2026, int(past[-1][:2]), int(past[-1][2:]))
             if (d0 - last).days > 14:
                 continue
+        # ローテ組の除外(9/7社長指摘: 9/2先発の西舘が9/5の候補は非現実的):
+        # 直近の登板が先発だった投手・5日以内に先発した投手はブルペン候補にしない
+        st_days = set(PCTX.get("starts", {}).get(pid, []))
+        if past and past[-1] in st_days:
+            continue
+        if any(0 < (d0 - _dt.date(2026, int(x[:2]), int(x[2:]))).days <= 5 for x in st_days if x < asof):
+            continue
         if rest_streak(pid, asof) >= 2:
             continue
         cands.append(pid)
