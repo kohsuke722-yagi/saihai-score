@@ -53,10 +53,20 @@ def fetch_player(pid: str) -> dict:
     return out
 
 
-# ── リーグ基準分布(NPB近年環境の代表値・較正予定と明示) ──
+# ── リーグ基準分布: 当季実測(palogが毎晩meta.jsonへ)を正とし、無ければ代表値(9/8修正:
+#    ハードコード値は実リーグよりOBPが1.2pt高い架空打者で、低n選手の縮小先として過大だった) ──
 LEAGUE = {"BB": 0.085, "HBP": 0.010, "K": 0.215, "1B": 0.148,
           "2B": 0.042, "3B": 0.004, "HR": 0.026}
 LEAGUE["OUT"] = 1.0 - sum(LEAGUE.values())
+try:
+    with open(os.path.join(BASE, "data", "logs", "meta.json"), encoding="utf-8") as _f:
+        _ld = json.load(_f).get("league_dist")
+    if (_ld and abs(sum(_ld.values()) - 1.0) < 0.02
+            and all(k in _ld for k in ("BB", "K", "1B", "HR", "OUT"))):
+        LEAGUE = {k: float(_ld.get(k, 0.0))
+                  for k in ("BB", "HBP", "K", "1B", "2B", "3B", "HR", "OUT")}
+except Exception:
+    pass
 
 # 投手の打撃標準分布(セ・リーグ投手打席の代表値)
 PITCHER_BAT = {"BB": 0.03, "HBP": 0.004, "K": 0.42, "1B": 0.09,

@@ -159,6 +159,18 @@ def build():
     meta = {}
     for k, (a, b) in M.items():
         meta[k] = {"p": round(a / b, 4) if b else None, "n": b}
+    # 実測リーグ分布(9/8打順レビュー#3: ハードコードの縮小先が実リーグ比+0.44点の架空打者
+    # だった問題の修正。stats.pyが縮小先・オッズ基準にこれを使う)
+    lgc = {}
+    for rows in batters.values():
+        for r in rows:
+            c = {"OUT_G": "OUT", "OUT_A": "OUT", "DP": "OUT"}.get(r[1], r[1])
+            if c in ("SH", "IBB"):
+                continue
+            lgc[c] = lgc.get(c, 0) + 1
+    tot_lg = sum(lgc.values())
+    if tot_lg:
+        meta["league_dist"] = {k: round(v / tot_lg, 5) for k, v in lgc.items()}
     json.dump(meta, open(os.path.join(LOGS, "meta.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     npa_b = sum(len(v) for v in batters.values())
     print(f"games={n_games} batters={len(batters)}({npa_b}打席) pitchers={len(pitchers)} 不明結果={len(unknown)}種")
