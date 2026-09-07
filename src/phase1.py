@@ -167,15 +167,22 @@ def bullpen_candidates(team_name, inning, entry_inning, ids, asof):
     eo_r = PCTX.get("e_outs", {}).get("relief", {})
     used = {ids.get(nm) for nm, inn in entry_inning.items() if inn <= inning}
     d0 = _dt.date(2026, int(asof[:2]), int(asof[2:]))
+    roster = KOUJI.get("rosters", {}).get(asof, {}).get(tc)  # 公示の一軍名簿(9/7〜蓄積)があれば厳密判定
     cands = []
     for pid, info in _HAND.items():
         if info.get("team") != tc or pid in used or pid not in eo_r:
             continue
-        past = [x for x in PCTX.get("appearances", {}).get(pid, []) if x < asof]
-        if not past:
-            continue
-        last = _dt.date(2026, int(past[-1][:2]), int(past[-1][2:]))
-        if (d0 - last).days > 14 or rest_streak(pid, asof) >= 2:
+        if roster:
+            if _norm_name(info.get("name", "")) not in roster:
+                continue
+        else:
+            past = [x for x in PCTX.get("appearances", {}).get(pid, []) if x < asof]
+            if not past:
+                continue
+            last = _dt.date(2026, int(past[-1][:2]), int(past[-1][2:]))
+            if (d0 - last).days > 14:
+                continue
+        if rest_streak(pid, asof) >= 2:
             continue
         cands.append(pid)
     return cands
@@ -707,7 +714,9 @@ def analyze_ph(mmdd, gid):
                         rec0["head_n_cand"] = len(evals)
                         rec0["decision_head"] = round(evals[best] - evals[pid_nw], 3)
                         if pid_nw in wvals and len(wvals) > 1:
-                            bw = min(wvals, key=wvals.get)
+                            rec0["pid_new"] = pid_nw
+                            rec0["head_wvals"] = {p: round(v, 4) for p, v in wvals.items()}
+                            bw = min(wvals, key=wvals.get)  # 暫定値(後段の1試合1回割当で確定)
                             rec0["head_best_wp"] = _HAND.get(bw, {}).get("name", bw)
                             rec0["decision_head_wp"] = round(wvals[bw] - wvals[pid_nw], 4)
                 out.append(rec0)
@@ -1003,6 +1012,25 @@ def analyze_ph(mmdd, gid):
                                cont=wc, p_dp=dp_ph, adv=adv_r)
             rec["decision_wp"] = round(wp_ph_v - wp_or_v, 4)
         out.append(rec)
+
+    # ②-d補正(9/7社長指摘): 同じ「最善」を複数の回頭で対抗手にすると方針の損を多重計上する
+    # (=マルティネス不使用を4回分減点する問題)。対抗手のアームは1試合1回まで、
+    # 影響の大きい見逃しから順に割り当てる(貪欲マッチング近似・真の解は割当問題=設計②-f)
+    for tm in {r.get("def_team") for r in out if r.get("head_wvals")}:
+        recs = [r for r in out if r.get("def_team") == tm and r.get("head_wvals")]
+        recs.sort(key=lambda r: min(r["head_wvals"].values())
+                  - r["head_wvals"].get(r.get("pid_new"), 0.0))
+        used_cf = set()
+        for r in recs:
+            act = r.get("pid_new")
+            wv = {p: v for p, v in r["head_wvals"].items() if p == act or p not in used_cf}
+            if act not in wv:
+                continue
+            b = min(wv, key=wv.get)
+            r["decision_head_wp"] = round(wv[b] - wv[act], 4)
+            r["head_best_wp"] = _HAND.get(b, {}).get("name", b)
+            if b != act:
+                used_cf.add(b)
     return out
 
 
