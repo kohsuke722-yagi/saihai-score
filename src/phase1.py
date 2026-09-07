@@ -641,6 +641,18 @@ def analyze_ph(mmdd, gid):
 
     # ── EV計算 ──
     out = []
+    _first_app = {}  # チーム -> {pid: (初出場回, 表裏順)}(④候補から出場中選手を除くため)
+
+    def first_apps(tm):
+        if tm not in _first_app:
+            d_ = {}
+            for e2 in events:
+                if e2.get("type") == "pa" and e2.get("team") == tm:
+                    p2 = pid_of(tm, e2.get("batter"))
+                    if p2 and p2 not in d_:
+                        d_[p2] = (e2["inning"], 0 if e2["half"] == "表" else 1)
+            _first_app[tm] = d_
+        return _first_app[tm]
     for r in results:
         st, outs, inning = r["state"], r["outs"], r["inning"]
         dteam = r.get("def_team") or (home if r.get("team") == away else away)
@@ -773,20 +785,18 @@ def analyze_ph(mmdd, gid):
             dp_b = dp_prob(pid_b, P_b, pid_pi, asof) * dpm_r
             wc4 = mk_wc(dist_n)
             wp_act = wp_state(inning, half, st, outs, diff_a, d_b, cont=wc4, p_dp=dp_b, adv=adv_r)
-            used_nm = {x.get("ph") for x in results if x.get("kind") == "ph"
-                       and (x["inning"], x["half"]) <= (inning, half)}
-            used_nm |= {x.get("sub") for x in results if x.get("kind") == "pr"
-                        and (x["inning"], x["half"]) <= (inning, half)}
+            fap = first_apps(r["team"])
+            now_ho = (inning, 0 if half == "表" else 1)
             tc4 = TEAM_NAME2CODE.get(r["team"], "")
             best_wp = best_nm = None
             for nm in (bench_bat.get(r["team"]) or [])[:12]:
-                if nm in used_nm:
-                    continue
                 n0 = _norm_name(nm)
                 hits = [p for p, dd in _HAND.items() if dd.get("team") == tc4
                         and _norm_name(dd.get("name", "")).startswith(n0)]
                 pid_c = hits[0] if len(hits) == 1 else None
                 if not pid_c or pid_c == pid_b:
+                    continue
+                if fap.get(pid_c, (99, 9)) <= now_ho:  # この時点で出場済み(スタメン含む)は候補外
                     continue
                 P_c = fetch_player(pid_c)
                 d_c = full(P_c, pid_c)
