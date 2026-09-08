@@ -41,16 +41,18 @@ def game_texts(mmdd, gids):
             print(f"{gid}: txt生成失敗→ダイジェストから除外", flush=True)
             continue
         lines = [ln.strip() for ln in open(txtp, encoding="utf-8").read().splitlines()
-                 if ln.strip() and not ln.startswith("#")]
-        if len(lines) >= 2:
-            out.append((gid, lines[0], lines[1]))
+                 if ln.strip()]
+        tags = [t for ln in lines if ln.startswith("#") for t in ln.split()]
+        body = [ln for ln in lines if not ln.startswith("#")]
+        if len(body) >= 2:
+            out.append((gid, body[0], body[1], tags))
     return out
 
 
 def compose(mmdd, rows):
     """TikTok読み上げ/キャプション用ダイジェスト"""
     best, worst = None, None
-    for gid, score, punch in rows:
+    for gid, score, punch, _tags in rows:
         for m in re.finditer(
                 r"(\d+)回の([^・]+)・([^(]+?)(?:が[^(]*)?\(勝率([+-][\d.]+)%\)", punch):
             v = float(m.group(4))
@@ -66,11 +68,18 @@ def compose(mmdd, rows):
     if worst:
         L.append(f"💀 今日のやらかし: {worst[1]}")
     L.append("─" * 18)
-    for gid, score, punch in rows:
+    for gid, score, punch, _tags in rows:
         L.append(f"▼ {score}")
         L.append(f"  {punch}")
     L.append("─" * 18)
-    L.append("#プロ野球 #NPB #野球 #采配 #データ野球 #野球解説")
+    # タグ: 基本タグ+当日試合のあった全球団タグ(各試合投稿文から集約・9/8社長指示)
+    base = ["#プロ野球", "#NPB", "#野球", "#采配", "#データ野球", "#野球解説"]
+    team_tags = []
+    for _gid, _s, _p, tags in rows:
+        for t in tags:
+            if t not in base and t not in team_tags:
+                team_tags.append(t)
+    L.append(" ".join(base + team_tags))
     return "\n".join(L)
 
 
