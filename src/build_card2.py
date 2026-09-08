@@ -235,7 +235,7 @@ def build(mmdd, gid, render_png=False, light=False):
     center = round(net(win["short"]) - net(lose["short"]), 2)
 
     def fmt(v, pt=True):
-        return f"{v:+.1f}" + ("%" if pt else "")
+        return f"{v:+.2f}" + ("%" if pt else "")  # 小数第2位まで(9/8社長「+0.0が動いてなく見える」)
 
     def situ_svg(state, outs):
         """TV風の場面表示: 塁ダイヤ(占有=黄)+アウトランプ(9/3社長指示)"""
@@ -262,8 +262,9 @@ def build(mmdd, gid, render_png=False, light=False):
         outl = []
         maxv = max((abs(x["v"]) for x in evs), default=1) or 1
         for i, e in enumerate(evs):
-            cls = "g" if e["v"] > 0 else "r"
-            first = (" first-g" if e["v"] > 0 else " first-r") if i == 0 else ""
+            neu = abs(e["v"]) < 0.005  # 表示が0.00に丸まる級=中立表示(色・UP/DOWNを付けない)
+            cls = "n" if neu else ("g" if e["v"] > 0 else "r")
+            first = "" if neu else ((" first-g" if e["v"] > 0 else " first-r") if i == 0 else "")
             w = int(abs(e["v"]) / maxv * 100)
             ev_txt = ""
             if e.get("ev_from") is not None and e.get("ev_to") is not None:
@@ -279,9 +280,9 @@ def build(mmdd, gid, render_png=False, light=False):
                 f'<div class="l2">{e["cat"]}{ev_txt}</div></div>'
                 f'<div style="width:50px;flex:none;text-align:center">{situ_svg(e["state"], e["outs"])}</div>'
                 f'<div style="text-align:center;flex:none;width:92px">'
-                f'<div class="ival {cls}">{fmt(e["v"], False)}</div>'
+                f'<div class="ival {cls}">{"±0.00" if neu else fmt(e["v"], False)}</div>'
                 f'<div style="font-size:11.5px;font-weight:900;letter-spacing:2px;opacity:.8" class="ival {cls}">'
-                f'{"勝率UP" if e["v"] >= 0 else "勝率DOWN"}</div></div>'
+                f'{"ほぼ中立" if neu else ("勝率UP" if e["v"] >= 0 else "勝率DOWN")}</div></div>'
                 f'<div class="mag {cls}" style="width:{w}%"></div></div>')
         if len(evs) < 3:  # 少ない試合は正直に表示(穴埋めしない・9/3社長指摘)
             outl.append(
