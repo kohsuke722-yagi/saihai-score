@@ -194,21 +194,33 @@ def build(d0, d1, png=False):
 
     html = f'''<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
-  body {{ width:1080px; height:1250px; color:#16213c; padding:0;
+  body {{ width:1080px; height:1250px; color:#16213c; padding:0; overflow:hidden; position:relative;
          font-family:"Yu Gothic","Hiragino Sans","Noto Sans CJK JP",sans-serif;
          background:
-           radial-gradient(1100px 540px at 88% -8%, rgba(47,111,224,.13), transparent 60%),
-           radial-gradient(900px 520px at -8% 108%, rgba(245,197,24,.13), transparent 60%),
-           #eef1f7; }}
-  .accent {{ height:7px; background:linear-gradient(90deg,#2f6fe0,#4fd8ff 35%,#f5c518 70%,#e0a90f); }}
-  .wrap {{ padding:26px 40px 0; }}
+           conic-gradient(from 178deg at 50% -14%, transparent 0 34%, rgba(255,255,255,.13) 37%,
+             transparent 40%, rgba(255,255,255,.09) 45%, transparent 48%, rgba(255,255,255,.13) 53%,
+             transparent 56%, rgba(255,255,255,.09) 61%, transparent 64%),
+           linear-gradient(135deg, #29b7ff 0%, #6d5dff 34%, #ff5fa8 68%, #ffb703 100%); }}
+  body::before {{ content:""; position:absolute; inset:0; pointer-events:none; opacity:.5; z-index:0;
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,.85) 0 2.4px, transparent 3.4px),
+      radial-gradient(circle, rgba(255,230,109,.8) 0 2px, transparent 3px);
+    background-size: 130px 170px, 150px 190px;
+    background-position: 10px 20px, 70px 90px; }}
+  .accent {{ height:9px; background:linear-gradient(90deg,#00e5ff,#6d5dff,#ff5fa8,#ffd166,#06d6a0);
+            position:relative; z-index:2; }}
+  .wrap {{ padding:26px 40px 0; position:relative; z-index:2; }}
   .head {{ display:flex; align-items:center; gap:18px; }}
   .logo {{ width:64px; height:64px; border-radius:16px; color:#fff; font-size:34px; font-weight:900;
-          background:linear-gradient(135deg,#2f6fe0,#12408a);
+          background:linear-gradient(135deg,#ffd34d,#f5a623); color:#131313;
           display:flex; align-items:center; justify-content:center;
-          box-shadow:0 8px 22px rgba(47,111,224,.45); }}
-  h1 {{ font-size:38px; font-weight:900; letter-spacing:3px; }}
-  .hsub2 {{ color:#5d6a86; font-size:15px; font-weight:700; margin-top:2px; }}
+          box-shadow:6px 6px 0 rgba(28,35,64,.3); transform:rotate(-2deg); }}
+  h1 {{ font-size:38px; font-weight:900; letter-spacing:3px; display:inline-block;
+       background:#fff; border-radius:14px; padding:4px 20px; transform:rotate(-1.2deg);
+       box-shadow:6px 6px 0 rgba(28,35,64,.3); }}
+  h1 span, h1 {{ background-clip:padding-box; }}
+  .hsub2 {{ color:#fff; font-size:15px; font-weight:800; margin-top:8px;
+           text-shadow:0 2px 10px rgba(28,35,64,.5); }}
   .chip {{ margin-left:auto; text-align:right; }}
   .period {{ background:#fff; border:1.5px solid #dde4f0; border-radius:12px; padding:8px 16px;
             font-size:16.5px; font-weight:900; color:#2c3a5c; box-shadow:0 4px 14px rgba(22,33,60,.06); }}
