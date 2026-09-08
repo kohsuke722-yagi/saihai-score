@@ -80,6 +80,41 @@ def parse_bunt_page(path):
     raise RuntimeError(f"列位置を特定できず: {path}")
 
 
+def measure_pi():
+    """企図率π(状態×アウト×打者タイプ)の実測(9/9・記述方策用): 全季_ph.jsonの
+    kind=bunt(企図)/swing(定石場面で打たせた)から π=bunt/(bunt+swing) を集計。
+    代打は両側から除外(swing側が元々代打除外のため対称性を取る)。
+    注: バント構えからの転換等の放棄企図は外形不能=企図に数えない(下方バイアス小)"""
+    att = {True: {}, False: {}}
+    opp = {True: {}, False: {}}
+    for f in glob.glob(os.path.join(BASE, "data", "out", "*", "*_ph.json")):
+        try:
+            recs = json.load(open(f, encoding="utf-8"))
+        except Exception:
+            continue
+        for r in recs:
+            k = r.get("kind")
+            if k not in ("bunt", "swing"):
+                continue
+            st, o = r.get("state"), r.get("outs")
+            if st not in ("1", "2", "12") or o not in (0, 1):
+                continue
+            if str(r.get("batter", "")).startswith("代打"):
+                continue
+            is_p = bool(r.get("batter_is_pitcher"))
+            key = f"{st}:{o}"
+            opp[is_p][key] = opp[is_p].get(key, 0) + 1
+            if k == "bunt":
+                att[is_p][key] = att[is_p].get(key, 0) + 1
+    pi = {}
+    for is_p, label in ((True, "pitcher"), (False, "fielder")):
+        pi[label] = {}
+        for key in sorted(opp[is_p]):
+            n, a = opp[is_p][key], att[is_p].get(key, 0)
+            pi[label][key] = {"att": a, "opp": n, "rate": round(a / n, 4) if n else 0.0}
+    return pi
+
+
 def main():
     pos_of, managers = roster_positions()
     with open(os.path.join(LOGS, "managers.json"), "w", encoding="utf-8") as f:
@@ -118,8 +153,13 @@ def main():
         print(f"{kind}: 企図{att} 成功{succ} 成功率{s:.1%} → 分岐{bunt_p[kind]}")
     if unknown:
         print(f"注: ロスター照合不能 {unknown}人(移籍・登録抹消等)は集計外")
+    pi = measure_pi()
+    for label in ("pitcher", "fielder"):
+        row = "  ".join(f"{k}={v['rate']:.0%}({v['att']}/{v['opp']})"
+                        for k, v in pi[label].items())
+        print(f"π[{label}]: {row}")
     with open(os.path.join(LOGS, "bunt_calib.json"), "w", encoding="utf-8") as f:
-        json.dump({"stats": stats, "bunt_p": bunt_p, "players": players},
+        json.dump({"stats": stats, "bunt_p": bunt_p, "pi": pi, "players": players},
                   f, ensure_ascii=False, indent=1)
     print("saved: bunt_calib.json / managers.json")
 

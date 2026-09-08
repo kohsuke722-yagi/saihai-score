@@ -47,7 +47,47 @@ def bunt_options(tm, names, dists, pitcher_flags):
                         + bp["leadout"] * re_of(LEADOUT[st], o + 1)
                         + bp["fail"] * re_of(st, o + 1))
                 if ev_b > ev_state(st, o, d):
-                    opt[(st, o)] = bp
+                    opt[(st, o)] = (bp, None)  # None=規範(純バント遷移)
+        out.append(opt)
+    return out
+
+
+def bunt_options_desc(tm, names, dists, pitcher_flags):
+    """記述方策(実際の監督文化): 実測企図率π(bunt_calib.pi・タイプ合算率へ縮小k=15)で
+    π×バント4分岐+(1-π)×打撃分布の混合遷移にする方策表。「実際の打順EV」用。
+    野手はリーグ一律だと主砲に幻のバントを課すため、個人の季節企図数で傾向スケール
+    (企図0の強打者→π≈0.2倍・常連→上振れ。cap3倍・縮小c=2)"""
+    from phase1 import (BUNT_P, personalize_bunt, state_adjust_bunt, _shr,
+                        _BC_PLAYERS, TEAM_NAME2CODE, _norm_name)
+    try:
+        cal = json.load(open(os.path.join(BASE, "data", "logs", "bunt_calib.json"),
+                             encoding="utf-8"))
+    except Exception:
+        cal = {}
+    PI = cal.get("pi", {})
+    # 野手の平均季節企図数(傾向スケールの基準): リーグ全野手企図÷レギュラー枠96
+    f_att = (cal.get("stats", {}).get("fielder", {}).get("att", 0)) / 96.0 or 7.0
+    tc = TEAM_NAME2CODE.get(tm, "")
+    out = []
+    for nm, d, is_p in zip(names, dists, pitcher_flags):
+        tbl = PI.get("pitcher" if is_p else "fielder", {})
+        pool_a = sum(v["att"] for v in tbl.values())
+        pool_n = sum(v["opp"] for v in tbl.values())
+        pool = pool_a / pool_n if pool_n else 0.0
+        prop = 1.0
+        if not is_p:
+            my_att = (_BC_PLAYERS.get(f"{tc}:{_norm_name(nm)}") or {}).get("att", 0)
+            prop = min(3.0, (my_att + 2.0) / (f_att + 2.0))
+        opt = {}
+        for st in BUNT_STATES:
+            bp = state_adjust_bunt(personalize_bunt(BUNT_P[is_p], is_p, tm, nm), st)
+            for o in (0, 1):
+                c = tbl.get(f"{st}:{o}")
+                if not c:
+                    continue
+                pi = min(0.97, _shr(c["att"], c["opp"], pool, 15) * prop)
+                if pi > 0.005:
+                    opt[(st, o)] = (bp, pi)
         out.append(opt)
     return out
 
@@ -60,15 +100,26 @@ def _bunt_branches(st, o, bp):
 
 
 def _trans_table(dists, bunts=None):
-    """打者別×全(塁,アウト)の遷移リストを前計算(bunts=規範方策表で差し替え)"""
+    """打者別×全(塁,アウト)の遷移リストを前計算。bunts=方策表
+    {(st,o): (bp, π)} — π=None:規範(純バント) / π=float:記述(π混合)"""
     T = []
     for i, d in enumerate(dists):
         bo = bunts[i] if bunts else {}
         t = {}
         for st in ("", "1", "2", "3", "12", "13", "23", "123"):
             for o in (0, 1, 2):
-                bp = bo.get((st, o))
-                t[(st, o)] = _bunt_branches(st, o, bp) if bp else transitions(st, o, d)
+                ent = bo.get((st, o))
+                if not ent:
+                    t[(st, o)] = transitions(st, o, d)
+                    continue
+                bp, pi = ent
+                bb = _bunt_branches(st, o, bp)
+                if pi is None:
+                    t[(st, o)] = bb
+                else:
+                    t[(st, o)] = [(p * pi, r, ns, no) for p, r, ns, no in bb] + \
+                                 [(p * (1 - pi), r, ns, no)
+                                  for p, r, ns, no in transitions(st, o, d)]
         T.append(t)
     return T
 
@@ -322,14 +373,23 @@ def game_ev_speed(dists, sp, order, bunts=None):
                     if o0 >= 3:
                         nxt[b] += p0  # 盗塁死で3アウト: 次の回は同じ打者から
                         continue
-                    bp_pol = None
+                    ent = None
                     if b9:
                         stc = ("1" if rid0[0] is not None else "") + \
                               ("2" if rid0[1] is not None else "") + \
                               ("3" if rid0[2] is not None else "")
-                        bp_pol = b9[b].get((stc, o0))
-                    trans = (_bunt_branches_id(rid0, o0, bp_pol, b) if bp_pol
-                             else transitions_id(rid0, o0, d9[b], s9))
+                        ent = b9[b].get((stc, o0))
+                    if not ent:
+                        trans = transitions_id(rid0, o0, d9[b], s9)
+                    else:
+                        bp_pol, pi = ent
+                        bb = _bunt_branches_id(rid0, o0, bp_pol, b)
+                        if pi is None:
+                            trans = bb
+                        else:
+                            trans = [(p * pi, r, ns, no) for p, r, ns, no in bb] + \
+                                    [(p * (1 - pi), r, ns, no) for p, r, ns, no
+                                     in transitions_id(rid0, o0, d9[b], s9)]
                     for pr, rn, nr, no in trans:
                         q = p0 * pr
                         runs += q * rn
@@ -445,13 +505,18 @@ def analyze_lineup(mmdd, gid):
             continue
         # 9/9裁定: 探索は局所探索(素DP・数秒)・表示EVは走力込みDPで統一通貨に
         # (検証: 走力は並びを±0.001級しか動かさないがEV水準を+0.3%上げる → 表示のみ精密化)
+        # バント方策(9/9裁定A): 実際EV=記述方策(実測π=監督文化の混合)・探索/最適EV=規範方策
         tc = TEAM_NAME2CODE.get(tm, "")
         sp = speed_params(tc, players)
-        ev_act_plain = game_ev(dists)
-        ev_act = game_ev_speed(dists, sp, list(range(9)))
-        best, ev_best_plain = optimize(dists, fixed=fixed)
-        ev_best = game_ev_speed(dists, sp, best)
-        if ev_best < ev_act:  # 素通貨の最適が走力通貨で逆転する稀ケース: 実際の並びが最適
+        pf = [i == fixed for i in range(9)]
+        nms = [p["name"] for p in players]
+        b_desc = bunt_options_desc(tm, nms, dists, pf)
+        b_norm = bunt_options(tm, nms, dists, pf)
+        ev_act_plain = game_ev(dists, b_desc)
+        ev_act = game_ev_speed(dists, sp, list(range(9)), b_desc)
+        best, ev_best_plain = optimize(dists, fixed=fixed, bunts=b_norm)
+        ev_best = game_ev_speed(dists, sp, best, b_norm)
+        if ev_best < ev_act:  # 通貨差で最適が逆転する稀ケース: 実際の並びが最適
             best, ev_best = list(range(9)), ev_act
         # ベンチ注記: スタメン野手最弱よりsolo EVが高いベンチ野手(上位1名)
         starters_pid = {p["pid"] for p in players}
@@ -524,10 +589,11 @@ def analyze_lineup(mmdd, gid):
             swap_slots[si] = nm
         ev_bm = None
         if swaps_in:
-            o_bm, _ = optimize(cur_d, fixed=fixed, restarts=1)
-            sp_bm = speed_params(tc, [{"name": swap_slots.get(i, players[i]["name"])}
-                                      for i in range(9)])
-            ev_bm = max(game_ev_speed(cur_d, sp_bm, o_bm), ev_best)
+            nms_bm = [swap_slots.get(i, nms[i]) for i in range(9)]
+            b_norm_bm = bunt_options(tm, nms_bm, cur_d, pf)
+            o_bm, _ = optimize(cur_d, fixed=fixed, restarts=1, bunts=b_norm_bm)
+            sp_bm = speed_params(tc, [{"name": n} for n in nms_bm])
+            ev_bm = max(game_ev_speed(cur_d, sp_bm, o_bm, b_norm_bm), ev_best)
         # ベンチ最強打者がどの守備位置にも適格でない=代打専任(丸型)の判定 → カードで役割として尊重
         pinch_ace = None
         if bench_best:
