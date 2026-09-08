@@ -1,0 +1,42 @@
+# スタメン発表見張り→打順カード→Discord配達(9/8社長要望)
+# 発表時刻の実勢: ナイター(18:00)は16時台・デーゲーム(13:00/14:00)は11時台。
+# GitHubのcron遅延対策で発火を分散(watch.ymlと同思想)。二重配達はマーカーで防止。
+name: pregame-lineup
+on:
+  schedule:
+    - cron: '57 1 * * *'   # 10:57 JST デーゲーム便
+    - cron: '37 2 * * *'   # 11:37 JST デーゲーム便バックアップ
+    - cron: '57 6 * * *'   # 15:57 JST ナイター便
+    - cron: '37 7 * * *'   # 16:37 JST ナイター便バックアップ1
+    - cron: '17 8 * * *'   # 17:17 JST ナイター便バックアップ2
+  workflow_dispatch:
+    inputs:
+      mmdd:
+        description: 'MMDD(省略=今日JST)'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pregame-lineup
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    steps:
+      - uses: actions/checkout@v4
+      - name: 日本語フォント
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+      - name: numpy
+        run: pip install -q numpy
+      - name: 発表見張り→打順カード→Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          BROWSER_BIN: /usr/bin/google-chrome
+          MMDD: ${{ inputs.mmdd }}
+          # デーゲーム便は14:10退出・ナイター便は18:40退出
+          DEADLINE: ${{ (github.event.schedule == '57 1 * * *' || github.event.schedule == '37 2 * * *') && '14:10' || '18:40' }}
+        run: python3 src/cloud_pregame.py --deadline $DEADLINE

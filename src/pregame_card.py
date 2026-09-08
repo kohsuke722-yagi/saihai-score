@@ -97,6 +97,33 @@ def build_game(mmdd, gid, png=False):
               f"(差 {r['diff']:+.2f})"
               + (f" → ベストメンバー {r['ev_bestmem']:.2f}" if r.get("ev_bestmem") else ""))
     build_from_results(res, mmdd, gid, png)
+    # Discord配達用の本文とJSON(cloud_pregame.pyが読む)
+    import json
+    outdir = os.path.join(BASE, "data", "out", mmdd)
+    json.dump(res, open(os.path.join(outdir, f"lineup_{gid}.json"), "w",
+                        encoding="utf-8"), ensure_ascii=False, indent=1)
+    try:
+        from build_card2 import parse_meta
+        venue = parse_meta(mmdd, gid).get("venue", "")
+    except Exception:
+        venue = ""
+    a, h = res
+    lines = [f"⚾ スタメン発表|{a['team']} × {h['team']}"
+             + (f"({venue})" if venue else ""),
+             f"並びの得点期待値: {a['team']} {a['ev_actual']:.2f}"
+             f" vs {h['team']} {h['ev_actual']:.2f}(9回換算・中立環境)"]
+    for r in res:
+        note = []
+        if r["diff"] <= -0.05:
+            note.append(f"並べ替え余地{-r['diff']:.2f}点")
+        if r.get("ev_bestmem") and r["ev_bestmem"] - r["ev_actual"] >= 0.1:
+            note.append(f"ベストメンバーなら+{r['ev_bestmem'] - r['ev_actual']:.2f}点"
+                        f"({'・'.join(r['bestmem_in'])} IN)")
+        if note:
+            lines.append(f"・{r['team']}: {'/'.join(note)}")
+    lines.append("※試験運用β・計算方法はnoteで公開")
+    open(os.path.join(outdir, f"lineup_{gid}.txt"), "w",
+         encoding="utf-8").write("\n".join(lines))
     return True
 
 
