@@ -101,13 +101,23 @@ def gate_stat(atoms9, fixed9, actual, band, B, rng):
             "band95": [round(lo, 4), round(hi, 4)], "istar": istar, "B": B}
 
 
-def null_band_his(atoms9, fixed9, opt_order, band, B, m_null, rng):
-    """帰無分布(9/9裁定): 完璧監督(=このデータが信じる最適並びを打つ)をm_null回
-    シミュレートし、各データセットの帯上端を集める → 判定線の較正に使う"""
+DELTA_BAND = 0.005  # 帯メンバーの資格(首位との差)。argmax不安定スケールの実測(検証①)に整合
+
+
+def null_band_his(atoms9, fixed9, band, B, m_null, rng, delta=DELTA_BAND):
+    """帯内H0の帰無分布(9/9裁定#2): 「THE最適を打ったか」は頂上が平坦すぎて検定不能
+    (診断: 真実のargmaxは1回の再抽選で98〜197位に大シャッフル・帰無の勝者だけ首位差が
+    水増しされFP30%)→ 帰無の監督=真実の帯内(首位とδ以内)の一様ランダムメンバーに変更。
+    有罪=「帯のどのメンバーとしても説明不能な並び」。完璧監督FP<5%は保守側で保証"""
+    d0 = [dist_of(a) if a else f for a, f in zip(atoms9, fixed9)]
+    evs0 = ev_orders(_trans_table(d0), band)
+    mx = evs0.max()
+    members = [i for i in range(len(band)) if mx - evs0[i] <= delta]
     his = []
     for _ in range(m_null):
+        ai = members[rng.randrange(len(members))]
         atoms_j = [resample(a, rng) if a else None for a in atoms9]
-        his.append(gate_stat(atoms_j, fixed9, opt_order, band, B, rng)["band95"][1])
+        his.append(gate_stat(atoms_j, fixed9, band[ai], band, B, rng)["band95"][1])
     return his
 
 
@@ -164,7 +174,7 @@ def main():
             band.append(actual)
         if not fp_mode:
             st = gate_stat(atoms9, fixed9, actual, band, B, rng)
-            his = null_band_his(atoms9, fixed9, band[st["istar"]], band, B, MN, rng)
+            his = null_band_his(atoms9, fixed9, band, B, MN, rng)
             v, p = verdict_of(st, his)
             c5 = sorted(his)[int(0.05 * len(his))]
             sec = time.perf_counter() - t0
@@ -181,7 +191,7 @@ def main():
             for m in range(M):
                 atoms_m = [resample(a, rng) if a else None for a in atoms9]
                 st = gate_stat(atoms_m, fixed9, o_best, band, B, rng)
-                his = null_band_his(atoms_m, fixed9, band[st["istar"]], band, B, MN, rng)
+                his = null_band_his(atoms_m, fixed9, band, B, MN, rng)
                 v, _p = verdict_of(st, his)
                 if v == "有意な見逃し":
                     fp += 1
