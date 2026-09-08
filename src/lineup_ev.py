@@ -383,10 +383,17 @@ def analyze_lineup(mmdd, gid):
             dists.append(d)
         if not ok or len(dists) != 9:
             continue
-        ev_act = game_ev(dists)
-        best, ev_best = optimize(dists, fixed=fixed)
-        # ベンチ注記: スタメン野手最弱よりsolo EVが高いベンチ野手(上位1名)
+        # 9/9裁定: 探索は局所探索(素DP・数秒)・表示EVは走力込みDPで統一通貨に
+        # (検証: 走力は並びを±0.001級しか動かさないがEV水準を+0.3%上げる → 表示のみ精密化)
         tc = TEAM_NAME2CODE.get(tm, "")
+        sp = speed_params(tc, players)
+        ev_act_plain = game_ev(dists)
+        ev_act = game_ev_speed(dists, sp, list(range(9)))
+        best, ev_best_plain = optimize(dists, fixed=fixed)
+        ev_best = game_ev_speed(dists, sp, best)
+        if ev_best < ev_act:  # 素通貨の最適が走力通貨で逆転する稀ケース: 実際の並びが最適
+            best, ev_best = list(range(9)), ev_act
+        # ベンチ注記: スタメン野手最弱よりsolo EVが高いベンチ野手(上位1名)
         starters_pid = {p["pid"] for p in players}
         cands, bench_best = [], None
         for nm, grp in (bench_bat.get(tm) or []):
@@ -432,7 +439,7 @@ def analyze_lineup(mmdd, gid):
             return (a - l).days <= 30
 
         cur_d = list(dists)
-        swaps_in, used_b = [], set()
+        swaps_in, used_b, swap_slots = [], set(), {}
         for _ in range(2):
             base_ev0 = game_ev(cur_d)
             best_gain, best_swap = 0.05, None  # 微差の入替提案はしない
@@ -454,9 +461,13 @@ def analyze_lineup(mmdd, gid):
             cur_d[si] = dc
             used_b.add(nm)
             swaps_in.append((nm, pc))
+            swap_slots[si] = nm
         ev_bm = None
         if swaps_in:
-            _, ev_bm = optimize(cur_d, fixed=fixed, restarts=1)
+            o_bm, _ = optimize(cur_d, fixed=fixed, restarts=1)
+            sp_bm = speed_params(tc, [{"name": swap_slots.get(i, players[i]["name"])}
+                                      for i in range(9)])
+            ev_bm = max(game_ev_speed(cur_d, sp_bm, o_bm), ev_best)
         # ベンチ最強打者がどの守備位置にも適格でない=代打専任(丸型)の判定 → カードで役割として尊重
         pinch_ace = None
         if bench_best:
@@ -466,6 +477,8 @@ def analyze_lineup(mmdd, gid):
         out.append({"team": tm, "players": players, "fixed": fixed,
                     "ev_actual": round(ev_act, 3), "ev_best": round(ev_best, 3),
                     "diff": round(ev_act - ev_best, 3),
+                    "ev_actual_plain": round(ev_act_plain, 3),
+                    "ev_best_plain": round(ev_best_plain, 3),
                     "best_order": [players[i]["name"] for i in best],
                     "ev_bestmem": round(ev_bm, 3) if ev_bm else None,
                     "bestmem_in": [f"{nm}({g})" for nm, g in swaps_in],
