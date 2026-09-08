@@ -1,0 +1,33 @@
+# 全試合終了後のTikTok用ダイジェスト文→Discord(9/8社長要望)
+# 結果カードの配達マーカーが全試合分揃ってから発火。cron遅延対策で3本分散
+name: tiktok-digest
+on:
+  schedule:
+    - cron: '17 13 * * *'  # 22:17 JST
+    - cron: '57 13 * * *'  # 22:57 JST バックアップ1
+    - cron: '37 14 * * *'  # 23:37 JST バックアップ2(締切23:59)
+  workflow_dispatch:
+    inputs:
+      mmdd:
+        description: 'MMDD(省略=今日JST)'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tiktok-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - name: ダイジェスト生成→Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          MMDD: ${{ inputs.mmdd }}
+          DEADLINE: ${{ github.event.schedule == '37 14 * * *' && '23:59' || '23:40' }}
+        run: python3 src/cloud_tiktok.py --deadline $DEADLINE
