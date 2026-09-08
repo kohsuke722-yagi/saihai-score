@@ -178,6 +178,18 @@ LIGHT_MAP = [
     ("#8b96ab", "#66718c"),
     ("--cyan:#4fd8ff", "--cyan:#1673c9"),
     ("rgba(79,216,255,.5)", "rgba(22,115,201,.2)"),
+    # 華やか化(9/8): パネルをポップなオフセット影+くっきり枠に
+    ("box-shadow:0 10px 26px rgba(0,0,0,.5)",
+     "box-shadow:7px 7px 0 rgba(28,35,64,.16), 0 14px 30px rgba(28,35,64,.2)"),
+    ("box-shadow:0 8px 22px rgba(0,0,0,.45)",
+     "box-shadow:5px 5px 0 rgba(28,35,64,.12), 0 10px 22px rgba(28,35,64,.16)"),
+    ("box-shadow:0 12px 28px rgba(0,0,0,.45)",
+     "box-shadow:7px 7px 0 rgba(28,35,64,.16), 0 14px 30px rgba(28,35,64,.2)"),
+    ("border:1px solid rgba(90,130,220,.3)", "border:2px solid #e2e8f6"),
+    ("border:1px solid rgba(90,130,220,.28)", "border:2px solid #e2e8f6"),
+    ("border:1px solid rgba(96,140,240,.35)", "border:2.5px solid #1c2340"),
+    ("box-shadow:0 0 36px rgba(40,90,220,.22), inset 0 1px 0 rgba(255,255,255,.08)",
+     "box-shadow:8px 8px 0 rgba(28,35,64,.24)"),
 ]
 
 
@@ -265,8 +277,8 @@ def build(mmdd, gid, render_png=False, light=False):
                 f'<div class="rankb {rk[i]}">{crowns[i]}</div>'
                 f'<div class="itx"><div class="l1">{e["inning"]}回 {e["desc"][:26]}</div>'
                 f'<div class="l2">{e["cat"]}{ev_txt}</div></div>'
-                f'{situ_svg(e["state"], e["outs"])}'
-                f'<div style="text-align:center;flex:none">'
+                f'<div style="width:50px;flex:none;text-align:center">{situ_svg(e["state"], e["outs"])}</div>'
+                f'<div style="text-align:center;flex:none;width:92px">'
                 f'<div class="ival {cls}">{fmt(e["v"], False)}</div>'
                 f'<div style="font-size:11.5px;font-weight:900;letter-spacing:2px;opacity:.8" class="ival {cls}">'
                 f'{"勝率UP" if e["v"] >= 0 else "勝率DOWN"}</div></div>'
@@ -417,6 +429,11 @@ def build(mmdd, gid, render_png=False, light=False):
     # チームカラー連動(9/3社長指示): ヘッダー帯の左右・上部バー・ロゴメダルを対戦カードの色に
     s = s.replace("rgba(42,79,158,.55)", f"rgba({AWAY['glow']},.30)")
     s = s.replace("rgba(158,128,12,.45)", f"rgba({HOME['glow']},.30)")
+    # 背景の左右・下radialを対戦チームカラーに(9/8社長「背景チームのになってない」)
+    s = s.replace("rgba(0,213,255,.22)", f"rgba({AWAY['glow']},.38)")
+    s = s.replace("rgba(255,95,168,.24)", f"rgba({HOME['glow']},.38)")
+    s = s.replace("rgba(109,93,255,.30)", f"rgba({AWAY['glow']},.30)")
+    s = s.replace("rgba(255,183,3,.22)", f"rgba({HOME['glow']},.30)")
     s = s.replace("linear-gradient(90deg,#2f6fe0,#4fd8ff 35%,#f5c518 70%,#e0a90f)",
                   f"linear-gradient(90deg,{AWAY['color']},{AWAY['color']} 38%,{HOME['color']} 62%,{HOME['color']})")
     s = s.replace("</style>",
