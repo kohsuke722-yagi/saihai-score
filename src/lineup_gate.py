@@ -174,7 +174,10 @@ def main():
             band.append(actual)
         if not fp_mode:
             st = gate_stat(atoms9, fixed9, actual, band, B, rng)
-            his = null_band_his(atoms9, fixed9, band, B, MN, rng)
+            # δ拡幅(9/9裁定#4): 帰無の帯資格は水増しされた首位から測るため、実測optimism分
+            # 広げて対称化(FP実測8%>5%の残滓対策)
+            dl = DELTA_BAND + abs(st["optimism"])
+            his = null_band_his(atoms9, fixed9, band, B, MN, rng, delta=dl)
             v, p = verdict_of(st, his)
             c5 = sorted(his)[int(0.05 * len(his))]
             sec = time.perf_counter() - t0
@@ -191,7 +194,8 @@ def main():
             for m in range(M):
                 atoms_m = [resample(a, rng) if a else None for a in atoms9]
                 st = gate_stat(atoms_m, fixed9, o_best, band, B, rng)
-                his = null_band_his(atoms_m, fixed9, band, B, MN, rng)
+                dl = DELTA_BAND + abs(st["optimism"])
+                his = null_band_his(atoms_m, fixed9, band, B, MN, rng, delta=dl)
                 v, _p = verdict_of(st, his)
                 if v == "有意な見逃し":
                     fp += 1
