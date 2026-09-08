@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""打順診断カード モックv1(2026-09-08・design-lineup-card.md v2の表示原則準拠)
-- 実名は上げのみ/名前入り最適打順は出さない/三値判定(v0は統計ゲート前のため
-  「最適域/並び替え余地」の2値+誤差注記)/構造の事実表示(出塁配置・左右並び)
+"""打順診断カード v3・華やか版(2026-09-08社長「カラフルで目を引く・ゴージャスではなく」)
+- 表示原則は据え置き: 実名は上げのみ/名前入り最適打順は出さない/構造の事実表示
+- デザイン: 鮮やかなマルチカラー背景+放射光+紙吹雪・チームカラーのリボン見出し・
+  ダイヤ型打順・主砲行フレア・ポップなオフセット影(金の重厚系は不採用)
 Usage: python src/lineup_card.py 0905 c-g-19 [--png]
 """
 import os
@@ -14,17 +15,6 @@ from lineup_ev import analyze_lineup  # noqa
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
-
-def medal(tm, size=52, fs=18):
-    t = TEAMS.get(tm, {})
-    col = t.get("color", "#888")
-    mono = t.get("mono", tm[:1])
-    return (f'<div style="width:{size}px;height:{size}px;border-radius:50%;flex:none;'
-            f'background:radial-gradient(circle at 32% 28%, #ffffff, #eef2f9);'
-            f'border:2.5px solid {col};color:{col};font-size:{fs}px;font-weight:900;'
-            f'display:flex;align-items:center;justify-content:center;'
-            f'box-shadow:0 0 14px {col}55">{mono}</div>')
 
 
 def insights(r):
@@ -66,12 +56,12 @@ def pos_of(role):
     return ""
 
 
-def team_panel(r, meta_side):
+def team_panel(r, side):
     t = TEAMS.get(r["team"], {})
-    col = t.get("color", "#333")
+    col, glow = t.get("color", "#333"), t.get("glow", "60,60,60")
     diff = r["diff"]
     if diff >= -0.05:
-        badge = '<span class="badge ok">✓ ほぼ最適の並び</span>'
+        badge = '<span class="badge ok">✔ ほぼ最適の並び</span>'
     else:
         badge = f'<span class="badge amber">並び替え余地 {diff:+.2f}点</span>'
     field = [p for p in r["players"] if "投" not in p["role"]]
@@ -83,69 +73,72 @@ def team_panel(r, meta_side):
         w = max(4, p["solo"] / mx_solo * 100)
         bchip = {"左": "l", "右": "r", "両": "s"}.get(p["bats"], "r")
         star = '<span class="star">★</span>' if p["pid"] == star_pid else ""
+        hot = " hot" if p["pid"] == star_pid else ""
         rows.append(f'''
-      <div class="prow">
+      <div class="prow{hot}">
         <div class="slot">{p["slot"]}</div>
         <div class="pn">{p["name"]}{star}<span class="role">{pos_of(p["role"])}</span></div>
         <div class="hand {bchip}">{p["bats"]}</div>
-        <div class="pbar"><div class="pfill" style="width:{w:.0f}%;background:linear-gradient(90deg,{col},{col}88)"></div></div>
+        <div class="pbar"><div class="pfill" style="width:{w:.0f}%;
+             background:linear-gradient(90deg,{col},rgba({glow},.55))"></div><div class="sheen"></div></div>
         <div class="pv">{'―' if is_p else f'{p["solo"]:.1f}'}</div>
       </div>''')
     ins = "".join(f'<div class="ins {c}">{txt}</div>' for c, txt in insights(r))
-    # EVラダー: 今日の並び → 並べ替え → ベストメンバー(同ポジ制約・IN選手のみ実名)
+    # EVラダー: 今日の並び → 並べ替え → ベストメンバー(同ポジ群制約・IN選手のみ実名)
+    # ラダー: 一番目立つ箱には常に「到達できるベストの数字」を入れる(9/8社長
+    # 「現メンバーがベストだと並びもベストに読める」指摘 — 入替なし時は並べ替え最適を主役に)
     ev_a, ev_b, ev_m = r["ev_actual"], r["ev_best"], r.get("ev_bestmem")
     steps = [f'<div class="lstep"><div class="lk">今日の並び</div><div class="lv">{ev_a:.2f}</div></div>',
-             f'<div class="larr">→</div>',
-             f'<div class="lstep"><div class="lk">並べ替え最適</div><div class="lv">{ev_b:.2f}'
-             f'<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div></div>']
+             '<div class="larr">▶</div>']
     if ev_m:
         inn = "・".join(r.get("bestmem_in") or [])
-        steps += [f'<div class="larr">→</div>',
-                  f'<div class="lstep gold"><div class="lk">ベストメンバー</div><div class="lv">{ev_m:.2f}'
-                  f'<span class="lg2">+{ev_m - ev_a:.2f}</span></div>'
+        steps += [f'<div class="lstep"><div class="lk">並べ替え最適</div><div class="lv">{ev_b:.2f}'
+                  f'<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div></div>',
+                  '<div class="larr">▶</div>',
+                  f'<div class="lstep best"><div class="lk">ベストメンバー</div>'
+                  f'<div class="lv">{ev_m:.2f}<span class="lg2">+{ev_m - ev_a:.2f}</span></div>'
                   f'<div class="lin">{inn} IN</div></div>']
     else:
-        steps += [f'<div class="larr">→</div>',
-                  f'<div class="lstep gold"><div class="lk">ベストメンバー</div>'
-                  f'<div class="lv" style="font-size:15px;padding-top:6px">現メンバーがベスト</div></div>']
+        steps.append(f'<div class="lstep best"><div class="lk">この9人のベスト(並べ替えで到達)</div>'
+                     f'<div class="lv">{ev_b:.2f}<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div>'
+                     f'<div class="lin">メンバー入替の提案なし</div></div>')
     ladder = f'<div class="ladder">{"".join(steps)}</div>'
+    rows_html = "".join(rows)
     return f'''
-  <div class="panel">
-    <div class="phead">{medal(r["team"])}
-      <div><div class="ptm" style="color:{col}">{r["team"]}</div>{badge}</div>
-      <div class="pev"><div class="pevl">この並びの得点期待値</div>
-        <div class="pevv">{r["ev_actual"]:.2f}<span class="unit">点/試合</span></div></div>
-    </div>
-    <div class="phdr"><span>打順</span><span style="margin-left:126px">左右</span><span style="margin-left:36px">打力(点/試合換算)</span></div>
-    {"".join(rows)}
+  <div class="panel" style="--tc:{col};--tg:{glow}">
+    <div class="ribbon"><span class="rmono">{t.get("mono", "")}</span>
+      <span class="rteam">{r["team"]}</span>{badge}
+      <span class="rev">{ev_a:.2f}<small>点/試合</small></span></div>
+    <div class="phdr"><span style="width:34px">打順</span><span style="width:146px"></span><span style="width:30px">左右</span><span style="flex:1;text-align:center">打力(点/試合換算)</span></div>
+    {rows_html}
     {ladder}
     {ins}
   </div>'''
 
 
 def versus(res):
-    a, h = res[0], res[1]
-    ca = TEAMS.get(a["team"], {}).get("color", "#4e8df5")
-    ch = TEAMS.get(h["team"], {}).get("color", "#f5c518")
+    a, h = res
+    ca = TEAMS.get(a["team"], {}).get("color", "#888")
+    ch = TEAMS.get(h["team"], {}).get("color", "#888")
     tot = a["ev_actual"] + h["ev_actual"]
     fa = a["ev_actual"] / tot * 100 if tot else 50
     lead = a if a["ev_actual"] >= h["ev_actual"] else h
     gap = abs(a["ev_actual"] - h["ev_actual"])
     return f'''
   <div class="vs">
-    <div class="vslbl">打線力バランス(この並び同士・中立環境)</div>
+    <div class="vslbl">⚡ 打線力バランス(この並び同士・中立環境)</div>
     <div class="vsrow">
       <div class="vst" style="color:{ca}">{a["team"]} {a["ev_actual"]:.2f}</div>
       <div class="vsbar">
         <div style="position:absolute;left:0;top:0;bottom:0;width:{fa:.1f}%;
-             background:linear-gradient(90deg,{ca},{ca}99);box-shadow:0 0 12px {ca}66"></div>
+             background:linear-gradient(90deg,{ca},{ca}bb)"></div>
         <div style="position:absolute;right:0;top:0;bottom:0;width:{100 - fa:.1f}%;
-             background:linear-gradient(90deg,{ch}99,{ch});box-shadow:0 0 12px {ch}66"></div>
-        <div class="vszero"></div>
+             background:linear-gradient(90deg,{ch}bb,{ch})"></div>
+        <div class="vsstripe"></div><div class="vszero"></div>
       </div>
       <div class="vst" style="color:{ch};text-align:right">{h["ev_actual"]:.2f} {h["team"]}</div>
     </div>
-    <div class="vssub">{lead["team"]}の並びが +{gap:.2f}点/試合 上回る</div>
+    <div class="vssub">{lead["team"]}の並びが <b>+{gap:.2f}点/試合</b> 上回る</div>
   </div>'''
 
 
@@ -166,91 +159,121 @@ def build_from_results(res, mmdd, gid, png=False):
         date, venue = f"{int(mmdd[:2])}月{int(mmdd[2:])}日", ""
     html = f'''<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
-  body {{ width:1080px; height:1250px; color:#16213c; padding:0;
+  body {{ width:1080px; height:1250px; color:#1c2340; overflow:hidden; position:relative;
          font-family:"Yu Gothic","Hiragino Sans","Noto Sans CJK JP",sans-serif;
          background:
-           radial-gradient(1100px 540px at 88% -8%, rgba(47,111,224,.13), transparent 60%),
-           radial-gradient(900px 520px at -8% 108%, rgba(245,197,24,.13), transparent 60%),
-           #eef1f7; }}
-  .accent {{ height:7px; background:linear-gradient(90deg,#2f6fe0,#4fd8ff 35%,#f5c518 70%,#e0a90f); }}
-  .wrap {{ padding:24px 38px 0; }}
-  .head {{ display:flex; align-items:center; gap:18px; margin-bottom:16px; }}
-  .logo {{ width:60px; height:60px; border-radius:15px; color:#fff; font-size:32px; font-weight:900;
-          background:linear-gradient(135deg,#2f6fe0,#12408a);
+           conic-gradient(from 178deg at 50% -14%, transparent 0 34%, rgba(255,255,255,.14) 37%,
+             transparent 40%, rgba(255,255,255,.1) 45%, transparent 48%, rgba(255,255,255,.14) 53%,
+             transparent 56%, rgba(255,255,255,.1) 61%, transparent 64%),
+           linear-gradient(135deg, #29b7ff 0%, #6d5dff 34%, #ff5fa8 68%, #ffb703 100%); }}
+  body::before {{ content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,.85) 0 2.6px, transparent 3.6px),
+      radial-gradient(circle, rgba(255,230,109,.8) 0 2.2px, transparent 3.2px),
+      radial-gradient(circle, rgba(255,255,255,.55) 0 1.8px, transparent 2.8px);
+    background-size: 130px 170px, 150px 190px, 90px 120px;
+    background-position: 10px 20px, 70px 90px, 40px 50px; }}
+  body::after {{ content:""; position:absolute; inset:0; pointer-events:none;
+    background:
+      radial-gradient(circle at 90% 6%, rgba(255,255,255,.22) 0 120px, transparent 121px),
+      radial-gradient(circle at 4% 40%, rgba(255,255,255,.14) 0 90px, transparent 91px),
+      radial-gradient(circle at 96% 78%, rgba(255,255,255,.12) 0 110px, transparent 111px); }}
+  .accent {{ height:9px; background:linear-gradient(90deg,#00e5ff,#6d5dff,#ff5fa8,#ffd166,#06d6a0);
+            position:relative; z-index:2; }}
+  .wrap {{ padding:22px 34px 0; position:relative; z-index:2; }}
+  .head {{ display:flex; align-items:center; gap:18px; margin-bottom:14px; }}
+  .titlebox {{ transform:rotate(-1.6deg); background:#fff; border-radius:16px; padding:8px 26px 10px;
+              box-shadow:7px 7px 0 rgba(28,35,64,.35), 0 14px 40px rgba(28,35,64,.25); position:relative; }}
+  .titlebox::after {{ content:"✦"; position:absolute; right:-14px; top:-16px; font-size:30px; color:#fff;
+              text-shadow:0 0 14px rgba(255,255,255,.95); }}
+  h1 {{ font-size:44px; font-weight:900; letter-spacing:4px;
+       background:linear-gradient(95deg,#1d9bf0,#6d5dff 40%,#ff2e88 75%,#ff8a00);
+       -webkit-background-clip:text; color:transparent; }}
+  .hsub {{ color:#fff; font-size:14.5px; font-weight:800; margin-top:9px; letter-spacing:1px;
+          text-shadow:0 2px 10px rgba(28,35,64,.5); }}
+  .chip {{ margin-left:auto; text-align:right; background:#fff; border-radius:16px; padding:10px 18px;
+          font-size:15.5px; font-weight:900; color:#1c2340; box-shadow:6px 6px 0 rgba(28,35,64,.28); }}
+  .beta {{ display:inline-block; background:linear-gradient(90deg,#ff5fa8,#ff8a00); color:#fff;
+          border-radius:99px; font-size:11.5px; font-weight:900; padding:2px 12px; margin-top:6px; }}
+  .cols {{ display:flex; gap:22px; }}
+  .panel {{ flex:1; border-radius:22px; padding:0 16px 14px; background:#fff; position:relative;
+           box-shadow:9px 9px 0 rgba(var(--tg), .55), 0 22px 50px rgba(28,35,64,.3); }}
+  .ribbon {{ display:flex; align-items:center; gap:10px; padding:12px 16px; margin:0 -16px 8px;
+            border-radius:22px 22px 0 0; position:relative; overflow:hidden;
+            background:linear-gradient(100deg, var(--tc), rgba(var(--tg),.72)); }}
+  .ribbon::after {{ content:""; position:absolute; inset:0;
+     background:repeating-linear-gradient(-55deg, transparent 0 20px, rgba(255,255,255,.16) 20px 28px); }}
+  .rmono {{ width:44px; height:44px; border-radius:50%; border:2.5px solid #fff; flex:none; z-index:1;
+           font-size:14px; font-weight:900; color:#fff; display:flex; align-items:center;
+           justify-content:center; background:rgba(255,255,255,.16); }}
+  .rteam {{ font-size:24px; font-weight:900; color:#fff; letter-spacing:2px; z-index:1;
+           text-shadow:0 2px 10px rgba(0,0,0,.3); }}
+  .rev {{ margin-left:auto; font-size:34px; font-weight:900; color:#fff; font-style:italic; z-index:1;
+         text-shadow:0 2px 12px rgba(0,0,0,.35); }}
+  .rev small {{ font-size:12px; font-weight:800; margin-left:3px; font-style:normal; opacity:.9; }}
+  .badge {{ display:inline-block; border-radius:99px; font-size:11.5px; font-weight:900;
+           padding:3px 11px; z-index:1; }}
+  .badge.ok {{ background:#fff; color:#0d9e55; }}
+  .badge.amber {{ background:#fff; color:#c98a00; }}
+  .phdr {{ display:flex; gap:8px; color:#9fadcc; font-size:10.5px; font-weight:800; letter-spacing:1px;
+          border-bottom:2px solid #eef1f8; padding-bottom:4px; margin-bottom:2px; }}
+  .prow {{ display:flex; align-items:center; gap:8px; padding:3.5px 4px; border-radius:10px; }}
+  .prow.hot {{ background:linear-gradient(90deg,#fff3c8,transparent 75%); border-left:4px solid #ffbe0b; }}
+  .slot {{ width:30px; height:30px; flex:none; font-size:15px; font-weight:900; color:#fff;
           display:flex; align-items:center; justify-content:center;
-          box-shadow:0 8px 22px rgba(47,111,224,.45); }}
-  h1 {{ font-size:36px; font-weight:900; letter-spacing:3px; }}
-  .hsub {{ color:#5d6a86; font-size:14.5px; font-weight:700; margin-top:2px; }}
-  .chip {{ margin-left:auto; text-align:right; }}
-  .period {{ background:#fff; border:1.5px solid #dde4f0; border-radius:12px; padding:8px 16px;
-            font-size:15.5px; font-weight:900; color:#2c3a5c; box-shadow:0 4px 14px rgba(22,33,60,.06); }}
-  .beta {{ display:inline-block; background:#fff; border:1.5px solid #1673c9; color:#1673c9;
-          border-radius:99px; font-size:12px; font-weight:900; padding:2px 12px; margin-top:6px; }}
-  .cols {{ display:flex; gap:20px; }}
-  .panel {{ flex:1; background:rgba(255,255,255,.94); border-radius:20px; padding:18px 20px 14px;
-           box-shadow:0 10px 28px rgba(22,33,60,.09); }}
-  .phead {{ display:flex; gap:12px; align-items:center; margin-bottom:10px; }}
-  .ptm {{ font-size:22px; font-weight:900; }}
-  .badge {{ display:inline-block; border-radius:99px; font-size:12.5px; font-weight:900; padding:3px 12px; margin-top:4px; }}
-  .badge.ok {{ background:rgba(13,158,85,.12); color:#0a7f45; }}
-  .badge.amber {{ background:rgba(224,169,15,.15); color:#9a7208; }}
-  .pev {{ margin-left:auto; text-align:right; }}
-  .pevl {{ font-size:11.5px; font-weight:800; color:#66718c; letter-spacing:1px; }}
-  .pevv {{ font-size:31px; font-weight:900; color:#1673c9; text-shadow:0 0 14px rgba(22,115,201,.35); line-height:1.15; }}
-  .unit {{ font-size:13px; color:#5d6a86; margin-left:2px; }}
-  .pevb {{ font-size:11.5px; font-weight:700; color:#9fadcc; }}
-  .phdr {{ color:#9fadcc; font-size:11px; font-weight:800; letter-spacing:1px; border-bottom:1.5px solid #e6ebf4; padding-bottom:4px; }}
-  .prow {{ display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f0f3f9; }}
-  .slot {{ width:26px; height:26px; border-radius:8px; background:#f0f3f9; color:#46557a; flex:none;
-          font-size:14px; font-weight:900; display:flex; align-items:center; justify-content:center; }}
-  .pn {{ width:126px; flex:none; font-size:17.5px; font-weight:900; white-space:nowrap; }}
+          clip-path:polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+          background:linear-gradient(160deg, var(--tc), rgba(var(--tg),.6)); }}
+  .pn {{ width:146px; flex:none; font-size:18.5px; font-weight:900; white-space:nowrap; color:#1c2340; }}
   .role {{ color:#9fadcc; font-size:11px; font-weight:800; margin-left:5px; }}
-  .star {{ color:#e0a90f; font-size:13px; margin-left:2px; text-shadow:0 0 8px rgba(245,197,24,.8); }}
+  .star {{ color:#f5a300; font-size:13px; margin-left:2px; text-shadow:0 0 10px rgba(255,190,11,.9); }}
   .hand {{ width:26px; height:20px; border-radius:6px; flex:none; font-size:11.5px; font-weight:900;
           display:flex; align-items:center; justify-content:center; }}
-  .hand.l {{ background:rgba(221,61,53,.1); color:#b8302a; }}
-  .hand.r {{ background:rgba(22,115,201,.1); color:#1673c9; }}
-  .hand.s {{ background:rgba(13,158,85,.1); color:#0a7f45; }}
-  .pbar {{ flex:1; height:12px; background:#f0f3f9; border-radius:6px; overflow:hidden; }}
-  .pfill {{ height:100%; border-radius:6px; box-shadow:0 0 8px rgba(22,33,60,.15); }}
-  .pv {{ width:36px; flex:none; text-align:right; font-size:14px; font-weight:900; color:#2c3a5c; }}
-  .ladder {{ display:flex; align-items:stretch; gap:8px; margin:12px 0 4px; }}
-  .lstep {{ flex:1; background:#f7f9fd; border:1.5px solid #e6ebf4; border-radius:12px;
-           padding:8px 10px; text-align:center; }}
-  .lstep.gold {{ background:rgba(245,197,24,.08); border-color:rgba(224,169,15,.5);
-                box-shadow:0 0 14px rgba(245,197,24,.25); }}
-  .lk {{ font-size:11px; font-weight:900; color:#66718c; letter-spacing:1px; }}
-  .lv {{ font-size:22px; font-weight:900; color:#16213c; }}
+  .hand.l {{ background:#e3efff; color:#2266cc; }}
+  .hand.r {{ background:#ffe9e6; color:#cc4433; }}
+  .hand.s {{ background:#f1e6ff; color:#7a3fc9; }}
+  .pbar {{ flex:1; height:13px; border-radius:99px; background:#eef1f8; overflow:hidden; position:relative; }}
+  .pfill {{ height:100%; border-radius:99px; }}
+  .sheen {{ position:absolute; inset:0; border-radius:99px;
+           background:repeating-linear-gradient(115deg, transparent 0 10px, rgba(255,255,255,.28) 10px 14px); }}
+  .pv {{ width:36px; flex:none; text-align:right; font-size:14px; font-weight:900; color:#1c2340; }}
+  .ladder {{ display:flex; gap:7px; margin-top:10px; align-items:stretch; }}
+  .lstep {{ flex:1; border-radius:13px; padding:8px 11px; background:#f5f7fc; border:2px solid #e3e9f5; }}
+  .lstep.best {{ background:linear-gradient(120deg,#ffd166,#ff9770); border:2px solid #ff7b54;
+               box-shadow:4px 4px 0 rgba(255,123,84,.35); }}
+  .lstep.best .lk {{ color:#7c2d12; }} .lstep.best .lv {{ color:#4a1c06; }}
+  .lstep.best .lg2 {{ color:#0b6e3a; }} .lstep.best .lin {{ color:#7c2d12; }}
+  .lk {{ font-size:10.5px; font-weight:900; letter-spacing:1px; color:#66718c; }}
+  .lv {{ font-size:22px; font-weight:900; color:#1c2340; }}
   .lg2 {{ font-size:12px; font-weight:900; color:#0d9e55; margin-left:4px; }}
-  .lin {{ font-size:11.5px; font-weight:900; color:#9a7208; margin-top:2px; }}
-  .larr {{ align-self:center; color:#9fadcc; font-size:18px; font-weight:900; }}
-  .ins {{ margin-top:7px; border-radius:10px; padding:7px 12px; font-size:13px; font-weight:800; }}
-  .ins.good {{ background:rgba(13,158,85,.08); color:#0a7f45; }}
-  .ins.warn {{ background:rgba(221,61,53,.08); color:#b8302a; }}
-  .ins.info {{ background:rgba(22,115,201,.07); color:#2c5a9c; }}
-  .bench {{ margin-top:8px; border-top:1.5px dashed #e6ebf4; padding-top:8px; color:#5d6a86;
-           font-size:13.5px; font-weight:700; }}
-  .bench b {{ color:#16213c; }}
-  .vs {{ margin-top:18px; background:rgba(255,255,255,.94); border-radius:20px; padding:16px 24px;
-        box-shadow:0 10px 28px rgba(22,33,60,.09); }}
-  .vslbl {{ font-size:13px; font-weight:900; letter-spacing:2px; color:#66718c; margin-bottom:10px; }}
+  .lin {{ font-size:11px; font-weight:900; color:#9a7208; margin-top:1px; }}
+  .larr {{ align-self:center; color:#b7c1dd; font-size:14px; font-weight:900; }}
+  .ins {{ margin-top:6px; border-radius:10px; padding:6px 11px; font-size:12.5px; font-weight:800; }}
+  .ins.good {{ background:#dcf7e9; color:#0b7a42; }}
+  .ins.warn {{ background:#ffe8e0; color:#b4432a; }}
+  .ins.info {{ background:#e8eefb; color:#3d5588; }}
+  .vs {{ margin-top:16px; border-radius:20px; padding:14px 22px; background:#fff;
+        box-shadow:8px 8px 0 rgba(28,35,64,.3), 0 18px 44px rgba(28,35,64,.25); }}
+  .vslbl {{ font-size:12.5px; font-weight:900; letter-spacing:2px; color:#66718c; margin-bottom:8px; }}
   .vsrow {{ display:flex; align-items:center; gap:14px; }}
   .vst {{ width:170px; flex:none; font-size:20px; font-weight:900; }}
-  .vsbar {{ position:relative; flex:1; height:22px; border-radius:11px; overflow:hidden;
-           background:#f0f3f9; }}
-  .vszero {{ position:absolute; left:50%; top:0; bottom:0; width:2px; background:rgba(255,255,255,.85); }}
+  .vsbar {{ flex:1; height:20px; border-radius:99px; position:relative; overflow:hidden; background:#eef1f8; }}
+  .vsstripe {{ position:absolute; inset:0;
+    background:repeating-linear-gradient(115deg, transparent 0 14px, rgba(255,255,255,.2) 14px 19px); }}
+  .vszero {{ position:absolute; left:50%; top:-3px; bottom:-3px; width:3px; background:#fff;
+            box-shadow:0 0 8px rgba(28,35,64,.4); }}
   .vssub {{ margin-top:8px; color:#5d6a86; font-size:13.5px; font-weight:800; text-align:center; }}
-  .note {{ margin-top:14px; background:rgba(255,255,255,.72); border-radius:14px; padding:12px 18px;
-          color:#5d6a86; font-size:12.5px; font-weight:700; line-height:1.7; }}
-  .foot {{ margin-top:10px; text-align:center; color:#8b96ab; font-size:12.5px; font-weight:700; letter-spacing:1px; }}
+  .vssub b {{ color:#e0447a; }}
+  .note {{ margin-top:12px; border-radius:14px; padding:9px 16px; background:rgba(255,255,255,.86);
+          color:#525f8a; font-size:11.5px; font-weight:700; line-height:1.65; }}
+  .foot {{ margin-top:7px; text-align:center; color:#fff; font-size:12.5px; font-weight:800;
+          letter-spacing:1px; text-shadow:0 2px 8px rgba(28,35,64,.55); }}
 </style></head><body>
 <div class="accent"></div>
 <div class="wrap">
   <div class="head">
-    <div class="logo">采</div>
-    <div><h1>打順診断</h1>
+    <div><div class="titlebox"><h1>⚾ 打順診断</h1></div>
       <div class="hsub">その日のスタメンで「何点取れる並びか」をデータで検証</div></div>
-    <div class="chip"><div class="period">{date}&nbsp;&nbsp;◉ {venue}</div><br><span class="beta">β 試験運用</span></div>
+    <div class="chip">{date}&nbsp;&nbsp;◉ {venue}<br><span class="beta">β 試験運用</span></div>
   </div>
   <div class="cols">{team_panel(res[0], "away")}{team_panel(res[1], "home")}</div>
   {versus(res)}
