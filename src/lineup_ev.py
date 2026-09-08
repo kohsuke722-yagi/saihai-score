@@ -587,7 +587,7 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
         swaps_in, used_b, swap_slots = [], set(), {}
         for _ in range(2):
             base_ev0 = game_ev(cur_d)
-            best_gain, best_swap = 0.05, None  # 微差の入替提案はしない
+            trials = []
             for si, p in enumerate(players):
                 pc = exact_pos(p["role"])
                 if pc in (None, "投"):
@@ -598,11 +598,17 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
                     trial = list(cur_d)
                     trial[si] = dc
                     gain = game_ev(trial) - base_ev0
-                    if gain > best_gain:
-                        best_gain, best_swap = gain, (si, nm, pc, dc, pidc)
-            if not best_swap:
+                    if gain > 0.05:  # 微差の入替提案はしない
+                        trials.append((gain, si, nm, pc, dc, pidc))
+            if not trials:
                 break
-            si, nm, pc, dc, pidc = best_swap
+            # EVが誤差帯(0.02)内の複数案がある場合は本職(そのポジの先発数最多)を優先
+            # (9/8社長「ダルベックは3Bより1Bでは」— 守備の質は測れないため起用実績で代理)
+            gmax = max(t[0] for t in trials)
+            near = [t for t in trials if t[0] >= gmax - 0.02]
+            best_swap = max(near, key=lambda t: (DEF.get(f"{tm}|{t[2]}", {})
+                                                 .get(t[3], {}).get("n", 0)))
+            _, si, nm, pc, dc, pidc = best_swap
             cur_d[si] = dc
             used_b.add(nm)
             # 直近フォーム注記(9/8社長「ダルベックは直近落ちてる」→INは総合力評価だと明示)
