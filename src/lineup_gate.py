@@ -16,7 +16,8 @@ import time
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lineup_ev import _trans_table, game_ev_from, full_search  # noqa
+from lineup_ev import _trans_table, game_ev_from  # noqa
+from lineup_fast import ev_orders, fast_full_search  # noqa
 from verify_lineup_search import load_teams  # noqa
 from stats import PITCHER_BAT, LEAGUE, _blend  # noqa
 from stats2 import (_load, _days, _season_bat_counts, _norm, _self_w,  # noqa
@@ -75,20 +76,19 @@ def gate_one(atoms9, fixed9, actual, band, B, rng, label=""):
     """1チームのゲート判定。atoms9=打者別原子(固定はNone,dist)・band=候補並び(先頭=点推定最適)
     returns dict(diff_hat, optimism, band95, verdict, ...)"""
     d0 = [dist_of(a) if a else f for a, f in zip(atoms9, fixed9)]
-    T0 = _trans_table(d0)
-    ev0_act = game_ev_from(T0, actual)
-    ev0_best = max(game_ev_from(T0, o) for o in band)
-    diff_hat = ev0_act - ev0_best
-    o_star = max(band, key=lambda o: game_ev_from(T0, o))
+    ia = band.index(actual)  # bandはactualを含む前提(main側で保証)
+    evs0 = ev_orders(_trans_table(d0), band)
+    ev0_act = evs0[ia]
+    diff_hat = float(ev0_act - evs0.max())
+    istar = int(evs0.argmax())
     diffs, phantoms = [], []
     for _ in range(B):
         db = [dist_of(resample(a, rng)) if a else f
               for a, f in zip(atoms9, fixed9)]
-        Tb = _trans_table(db)
-        evs = [game_ev_from(Tb, o) for o in band]
-        mx = max(evs)
-        diffs.append(game_ev_from(Tb, actual) - mx)
-        phantoms.append(game_ev_from(Tb, o_star) - mx)
+        evs = ev_orders(_trans_table(db), band)
+        mx = evs.max()
+        diffs.append(float(evs[ia] - mx))
+        phantoms.append(float(evs[istar] - mx))
     opt_bias = sum(phantoms) / len(phantoms)
     corr = sorted(d - opt_bias for d in diffs)
     lo = corr[int(0.025 * len(corr))]
@@ -131,14 +131,14 @@ def main():
     def arg(k, dv):
         return int(args[args.index(k) + 1]) if k in args else dv
     fp_mode = "--fp" in args
-    B = arg("--b", 120 if fp_mode else 400)
-    K = arg("--k", 50 if fp_mode else 200)
-    M = arg("--m", 40)
+    B = arg("--b", 400)  # 高速化(lineup_fast)によりFPも本番設定で回す
+    K = arg("--k", 200)
+    M = arg("--m", 100)
     rng = random.Random(20260909)
     results = []
     for tm, names, dists, fixed, atoms9, fixed9 in load_atoms(mmdd, gid):
         t0 = time.perf_counter()
-        o_best, _, top = full_search(dists, fixed=fixed, topk=K)
+        o_best, _, top = fast_full_search(dists, fixed=fixed, topk=K)
         band = [o for _, o in sorted(top, reverse=True)]
         actual = list(range(9))
         if actual not in band:
