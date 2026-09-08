@@ -232,8 +232,8 @@ def build_from_results(res, mmdd, gid, png=False):
            padding:3px 11px; z-index:1; }}
   .badge.ok {{ background:#fff; color:#0d9e55; }}
   .badge.amber {{ background:#fff; color:#c98a00; }}
-  .phdr {{ display:flex; gap:8px; color:#9fadcc; font-size:10.5px; font-weight:800; letter-spacing:1px;
-          border-bottom:2px solid #eef1f8; padding-bottom:4px; margin-bottom:2px; }}
+  .phdr {{ display:flex; gap:8px; color:#5f6f99; font-size:10.5px; font-weight:900; letter-spacing:1px;
+          border-bottom:2px solid #e3e9f5; padding-bottom:4px; margin-bottom:2px; }}
   .prow {{ display:flex; align-items:center; gap:8px; padding:3.5px 4px; border-radius:10px; }}
   .prow.hot {{ background:linear-gradient(90deg,#fff3c8,transparent 75%); border-left:4px solid #ffbe0b; }}
   .slot {{ width:30px; height:30px; flex:none; font-size:15px; font-weight:900; color:#fff;
@@ -241,7 +241,7 @@ def build_from_results(res, mmdd, gid, png=False):
           clip-path:polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
           background:linear-gradient(160deg, var(--tc), rgba(var(--tg),.6)); }}
   .pn {{ width:146px; flex:none; font-size:18.5px; font-weight:900; white-space:nowrap; color:#1c2340; }}
-  .role {{ color:#9fadcc; font-size:11px; font-weight:800; margin-left:5px; }}
+  .role {{ color:#6b7ba5; font-size:11px; font-weight:900; margin-left:5px; }}
   .star {{ color:#f5a300; font-size:13px; margin-left:2px; text-shadow:0 0 10px rgba(255,190,11,.9); }}
   .hand {{ width:26px; height:20px; border-radius:6px; flex:none; font-size:11.5px; font-weight:900;
           display:flex; align-items:center; justify-content:center; }}
@@ -267,12 +267,12 @@ def build_from_results(res, mmdd, gid, png=False):
      background:repeating-linear-gradient(-55deg, transparent 0 16px, rgba(255,255,255,.18) 16px 22px); }}
   .lstep.best .lk {{ color:#7c2d12; }} .lstep.best .lv {{ color:#4a1c06; }}
   .lstep.best .lg2 {{ color:#0b6e3a; }} .lstep.best .lin {{ color:#7c2d12; }}
-  .lk {{ font-size:10.5px; font-weight:900; letter-spacing:1px; color:#66718c; }}
+  .lk {{ font-size:10.5px; font-weight:900; letter-spacing:1px; color:#3d4d78; }}
   .lv {{ font-size:27px; font-weight:900; color:#1c2340; font-style:italic; line-height:1.15;
         position:relative; z-index:1; }}
-  .unit2 {{ font-size:11px; font-weight:800; font-style:normal; color:#8b96ab; margin-left:3px; }}
+  .unit2 {{ font-size:11px; font-weight:800; font-style:normal; color:#5f6f99; margin-left:3px; }}
   .lg2 {{ font-size:12.5px; font-weight:900; color:#0d9e55; margin-left:5px; }}
-  .lin {{ font-size:10.5px; font-weight:900; color:#8b96ab; margin-top:1px; position:relative; z-index:1; }}
+  .lin {{ font-size:10.5px; font-weight:900; color:#54648e; margin-top:1px; position:relative; z-index:1; }}
   .lchain {{ display:flex; flex-direction:column; align-items:center; justify-content:center;
             width:52px; flex:none; gap:2px; }}
   .dchip {{ background:#0d9e55; color:#fff; border-radius:99px; font-size:11.5px; font-weight:900;
@@ -284,7 +284,7 @@ def build_from_results(res, mmdd, gid, png=False):
   .ins.info {{ background:#e8eefb; color:#3d5588; }}
   .vs {{ margin-top:16px; border-radius:20px; padding:14px 22px; background:#fff;
         box-shadow:8px 8px 0 rgba(28,35,64,.3), 0 18px 44px rgba(28,35,64,.25); }}
-  .vslbl {{ font-size:12.5px; font-weight:900; letter-spacing:2px; color:#66718c; margin-bottom:8px; }}
+  .vslbl {{ font-size:12.5px; font-weight:900; letter-spacing:2px; color:#3d4d78; margin-bottom:8px; }}
   .vsrow {{ display:flex; align-items:center; gap:14px; }}
   .vst {{ width:170px; flex:none; font-size:20px; font-weight:900; }}
   .vsbar {{ flex:1; height:20px; border-radius:99px; position:relative; overflow:hidden; background:#eef1f8; }}
@@ -292,10 +292,10 @@ def build_from_results(res, mmdd, gid, png=False):
     background:repeating-linear-gradient(115deg, transparent 0 14px, rgba(255,255,255,.2) 14px 19px); }}
   .vszero {{ position:absolute; left:50%; top:-3px; bottom:-3px; width:3px; background:#fff;
             box-shadow:0 0 8px rgba(28,35,64,.4); }}
-  .vssub {{ margin-top:8px; color:#5d6a86; font-size:13.5px; font-weight:800; text-align:center; }}
+  .vssub {{ margin-top:8px; color:#39496f; font-size:13.5px; font-weight:800; text-align:center; }}
   .vssub b {{ color:#e0447a; }}
-  .note {{ margin-top:12px; border-radius:14px; padding:9px 16px; background:rgba(255,255,255,.86);
-          color:#525f8a; font-size:11.5px; font-weight:700; line-height:1.65; }}
+  .note {{ margin-top:12px; border-radius:14px; padding:9px 16px; background:rgba(255,255,255,.9);
+          color:#3d4d78; font-size:11.5px; font-weight:700; line-height:1.65; }}
   .foot {{ margin-top:7px; text-align:center; color:#fff; font-size:12.5px; font-weight:800;
           letter-spacing:1px; text-shadow:0 2px 8px rgba(28,35,64,.55); }}
 </style></head><body>
