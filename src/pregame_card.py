@@ -16,7 +16,7 @@ from stats import fetch_player, PITCHER_BAT  # noqa
 from stats2 import batter_dist2  # noqa
 from phase1 import (is_pitcher_bat, bench_roster, _HAND, _norm_name,  # noqa
                     TEAM_NAME2CODE, _FULL2SHORT_T)
-from lineup_ev import analyze_team, game_ev  # noqa
+from lineup_ev import analyze_team, game_ev, make_adjuster  # noqa
 from lineup_card import build_from_results  # noqa
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -58,6 +58,27 @@ def resolve_pid_fallback(tc, nm):
     return hits[0] if len(hits) == 1 else None
 
 
+def starters_today(mmdd):
+    """予告先発ページから {チーム名: (pid, 表示名)}。ページの日付がmmddと一致する時のみ
+    (夜間は翌日分に切り替わるため空を返す。セは相手打順の投手スロットからも取れる)"""
+    import re as _re
+    from fetch import get
+    try:
+        h = get("https://npb.jp/announcement/starter/")
+    except Exception:
+        return {}
+    m = _re.search(r"<h4>(\d+)月(\d+)日の予告先発投手</h4>", h)
+    if not m or f"{int(m.group(1)):02d}{int(m.group(2)):02d}" != mmdd:
+        return {}
+    out = {}
+    for c, pid, nm in _re.findall(
+            r'logo_(\w+)_m\.gif.*?players/(\d+)\.html">\s*<span>([^<]+)</span>', h, _re.S):
+        tm = CODE2NAME.get(c)
+        if tm:
+            out[tm] = (pid, _norm_name(nm).replace("　", ""))
+    return out
+
+
 def build_game(mmdd, gid, png=False):
     lu = parse_box_lineup(mmdd, gid)
     if not lu or len(lu) < 2:
@@ -70,8 +91,21 @@ def build_game(mmdd, gid, png=False):
         return False
     _, bench_bat = bench_roster(mmdd, gid)
     rids = roster_ids(mmdd, gid)
+    st_page = starters_today(mmdd)
+
+    def starter_of(tm, l):
+        """そのチームの先発: セ=打順の投手スロット/パ=予告先発ページ"""
+        for s0 in range(9):
+            role, nm = l.get(s0, ("", ""))
+            if "投" in (role or ""):
+                pid = (rids.get(tm) or {}).get(_norm_name(nm)) \
+                    or resolve_pid_fallback(TEAM_NAME2CODE[tm], nm)
+                if pid:
+                    return pid, nm
+        return st_page.get(tm) or (None, "")
+    stt = {away: starter_of(away, lu[0]), home: starter_of(home, lu[1])}
     res = []
-    for tm, l in ((away, lu[0]), (home, lu[1])):
+    for tm, opp, l in ((away, home, lu[0]), (home, away, lu[1])):
         tc = TEAM_NAME2CODE[tm]
         players, dists, fixed = [], [], None
         for s0 in range(9):
@@ -91,7 +125,15 @@ def build_game(mmdd, gid, png=False):
                             "bats": P.get("bats", "右"), "obp": round(obp, 3),
                             "solo": round(game_ev([d] * 9), 2)})
             dists.append(d)
-        res.append(analyze_team(tm, mmdd, players, dists, fixed, bench_bat))
+        # 相手先発込み補正(§6 v1): 打力バー(solo)は素の実力・EVは対戦文脈込み
+        adj, sp_name = None, ""
+        opp_pid, opp_nm = stt.get(opp) or (None, "")
+        if opp_pid:
+            adj, sp_name, w_sp = make_adjuster(opp_pid, mmdd, name_hint=opp_nm)
+            dists = [adj(d) for d in dists]
+        r = analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=adj)
+        r["matchup"] = sp_name or None
+        res.append(r)
     for r in res:
         print(f"  {r['team']}: 実際 {r['ev_actual']:.2f} → 最適 {r['ev_best']:.2f} "
               f"(差 {r['diff']:+.2f})"

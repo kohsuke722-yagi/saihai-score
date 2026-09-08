@@ -225,6 +225,32 @@ def full_search(dists, fixed=None, topk=200, bunts=None):
     return best_order, best_ev, sorted(heap, reverse=True)
 
 
+def make_adjuster(opp_pid, mmdd, name_hint=""):
+    """相手先発込み補正(§6 v1・9/8社長「先発は考慮されてる?」→実装)。
+    打者分布×先発被打分布÷リーグの対数オッズ合成を、先発按分w_spだけ混ぜる
+    (残り1-w_spはリーグ平均ブルペン=素の分布のまま)。左右別スプリットは未反映(ログ拡張待ち)。
+    returns (dist→dist関数, 先発表示名, w_sp)"""
+    from stats import fetch_player
+    from stats2 import pitcher_dist2, league_meta, CLS
+    P = fetch_player(opp_pid)
+    dp = pitcher_dist2(opp_pid, P, 4, mmdd)
+    q = P.get("pit") or {}
+    g = q.get("G") or 0
+    w_sp = (min(0.75, max(0.35, q["TBF"] / g / 38.5))
+            if g and q.get("TBF") else 0.58)
+    L = league_meta().get("league_dist") or {}
+
+    def adj(d):
+        num = {}
+        for k in CLS:
+            num[k] = (max(1e-9, d.get(k, 0.0)) * max(1e-9, dp.get(k, 0.0))
+                      / max(1e-4, L.get(k, 0.0)))
+        s = sum(num.values())
+        return {k: w_sp * num[k] / s + (1 - w_sp) * d.get(k, 0.0) for k in CLS}
+    name = (P.get("name") or name_hint or "").replace("　", "").replace(" ", "")
+    return adj, name, w_sp
+
+
 def dist_short(pid, asof, half=15.0):
     """短期記憶(半減期15日)の打者分布 — ベストメンバー候補の頑健性チェック用。
     母体の較正半減期(batter_dist2)には触らない(9/8社長「減衰率おかしいのでは」への
@@ -540,9 +566,10 @@ def analyze_lineup(mmdd, gid):
     return out
 
 
-def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
+def analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=None):
     """1チーム分のエンジン評価(analyze_lineupから抽出・9/8試合前カード対応)。
-    players/dists=スタメン9人(打順順)・fixed=投手スロット・bench_bat=bench_roster野手側"""
+    players/dists=スタメン9人(打順順・adjは適用済みを渡す)・fixed=投手スロット・
+    bench_bat=bench_roster野手側・adj=相手先発込み補正(ベンチ候補・短期分布にも適用し通貨を揃える)"""
     # 9/9裁定: 探索は局所探索(素DP・数秒)・表示EVは走力込みDPで統一通貨に
     # (検証: 走力は並びを±0.001級しか動かさないがEV水準を+0.3%上げる → 表示のみ精密化)
     # バント方策(9/9裁定A): 実際EV=記述方策(実測π=監督文化の混合)・探索/最適EV=規範方策
@@ -573,6 +600,8 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
             if is_pitcher_bat(P) or not (P.get("bat") and P["bat"].get("PA", 0) >= 60):
                 continue
             dc = batter_dist2(pid, P, mmdd)
+            if adj:
+                dc = adj(dc)
             solo = game_ev([dc] * 9)
             cands.append((nm, grp, pid, dc, solo))
             if bench_best is None or solo > bench_best[1]:
@@ -636,10 +665,13 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
 
         base_ev0 = game_ev(dists)
         # 二重時計ルール(9/8社長): 短期記憶(h=15日)の分布でもゲインが正の案のみ提案
-        dists_s = [dists[i] if i == fixed else dist_short(players[i]["pid"], mmdd)
+        def _short(pid):
+            d = dist_short(pid, mmdd)
+            return adj(d) if adj else d
+        dists_s = [dists[i] if i == fixed else _short(players[i]["pid"])
                    for i in range(9)]
         base_s = game_ev(dists_s)
-        cands_s = {c[0]: dist_short(c[2], mmdd) for c in cands}
+        cands_s = {c[0]: _short(c[2]) for c in cands}
         sols = []
         for k in (1, 2):
             for ins in _it.combinations(cands, k):

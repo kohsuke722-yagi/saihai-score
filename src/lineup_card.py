@@ -20,6 +20,10 @@ if hasattr(sys.stdout, "reconfigure"):
 def insights(r):
     ps = r["players"]
     out = []
+    if r.get("matchup"):
+        out.append(("info", f"⚔ 本日の相手先発 {r['matchup']} 込みで換算(残りはリーグ平均ブルペン・左右別相性は未反映)"))
+    elif "matchup" in r:
+        out.append(("info", "相手先発 未反映(中立環境換算)"))
     bats = [p["bats"] for p in ps]
     runL = mx = 0
     for b in bats:
@@ -132,7 +136,7 @@ def versus(res):
     gap = abs(a["ev_actual"] - h["ev_actual"])
     return f'''
   <div class="vs">
-    <div class="vslbl">⚡ 打線力バランス(この並び同士・中立環境)</div>
+    <div class="vslbl">⚡ 打線力バランス({'今日の対戦条件込み' if a.get("matchup") and h.get("matchup") else 'この並び同士・中立環境'})</div>
     <div class="vsrow">
       <div class="vst" style="color:{ca}">{a["team"]} {a["ev_actual"]:.2f}</div>
       <div class="vsbar">
@@ -165,6 +169,9 @@ def build_from_results(res, mmdd, gid, png=False):
         date, venue = f"{int(mmdd[:2])}月{int(mmdd[2:])}日", ""
     ga = TEAMS.get(res[0]["team"], {}).get("glow", "41,183,255")
     gh = TEAMS.get(res[1]["team"], {}).get("glow", "255,183,3")
+    ev_note = ("得点期待値=9イニング換算・本日の相手先発込み(残りイニングはリーグ平均ブルペン想定・"
+               "左右別の相性は未反映)。" if all(r.get("matchup") for r in res) else
+               "得点期待値=9イニング・中立環境換算(相手投手の質は含みません)。")
     html = f'''<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   body {{ width:1080px; height:1250px; color:#1c2340; overflow:hidden; position:relative;
@@ -301,8 +308,8 @@ def build_from_results(res, mmdd, gid, png=False):
   </div>
   <div class="cols">{team_panel(res[0], "away")}{team_panel(res[1], "home")}</div>
   {versus(res)}
-  <div class="note">得点期待値=9イニング・中立環境換算(相手投手の質は含みません)。打力=その打者9人が並んだ場合の
-  点/試合換算。ベストメンバーは同ポジション群(捕手/内野/外野)内の入替のみの参考値で、守備力・休養・疲労は
+  <div class="note">{ev_note} 打力=その打者9人が並んだ場合の点/試合換算(素の実力・対戦補正なし)。
+  ベストメンバーは同ポジション群内の入替+守備再配置の参考値で、守備力・休養・疲労は
   考慮していません(候補は減衰込み総合力と短期2週評価の両方で上回る場合のみ提案。▼▲=直近2週の実出塁との乖離)。
   僅差は誤差の範囲です。計算方法はnoteで全公開。</div>
   <div class="foot">@saihaiscore_lab(β試験運用)| 計算方法はnoteで全公開 | データ: NPB公式記録より自動集計</div>
