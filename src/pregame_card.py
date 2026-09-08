@@ -58,24 +58,26 @@ def resolve_pid_fallback(tc, nm):
     return hits[0] if len(hits) == 1 else None
 
 
-def starters_today(mmdd):
-    """予告先発ページから {チーム名: (pid, 表示名)}。ページの日付がmmddと一致する時のみ
-    (夜間は翌日分に切り替わるため空を返す。セは相手打順の投手スロットからも取れる)"""
-    import re as _re
-    from fetch import get
-    try:
-        h = get("https://npb.jp/announcement/starter/")
-    except Exception:
+def pregame_starters(mmdd, gid):
+    """試合前index.htmlのバッテリー欄(スタメン発表済み=確定)から {チーム名: 投手名}。
+    9/8社長裁定: 予告先発は変更があり得るため使わない — 発表済みバッテリーのみ信頼"""
+    path = os.path.join(BASE, "data", "raw", mmdd, gid, "index.html")
+    if not os.path.exists(path):
         return {}
-    m = _re.search(r"<h4>(\d+)月(\d+)日の予告先発投手</h4>", h)
-    if not m or f"{int(m.group(1)):02d}{int(m.group(2)):02d}" != mmdd:
+    h = open(path, encoding="utf-8").read()
+    txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ",
+                                     re.sub(r"<script[\s\S]*?</script>", "", h)))
+    i = txt.find("バッテリー")
+    if i < 0:
         return {}
+    seg = txt[i:i + 300]
+    j = seg.find("本塁打")  # 直後の本塁打欄にも空の【チーム名】があり誤マッチする
+    if j > 0:
+        seg = seg[:j]
     out = {}
-    for c, pid, nm in _re.findall(
-            r'logo_(\w+)_m\.gif.*?players/(\d+)\.html">\s*<span>([^<]+)</span>', h, _re.S):
-        tm = CODE2NAME.get(c)
-        if tm:
-            out[tm] = (pid, _norm_name(nm).replace("　", ""))
+    for tm, p in re.findall(r"【([^】]+)】\s*([^\s【]+)", seg):
+        if tm in TEAM_NAME2CODE:
+            out.setdefault(tm, p)
     return out
 
 
@@ -91,10 +93,10 @@ def build_game(mmdd, gid, png=False):
         return False
     _, bench_bat = bench_roster(mmdd, gid)
     rids = roster_ids(mmdd, gid)
-    st_page = starters_today(mmdd)
+    battery = pregame_starters(mmdd, gid)
 
     def starter_of(tm, l):
-        """そのチームの先発: セ=打順の投手スロット/パ=予告先発ページ"""
+        """そのチームの先発: セ=打順の投手スロット/パ=試合前バッテリー欄(発表済み・確定)"""
         for s0 in range(9):
             role, nm = l.get(s0, ("", ""))
             if "投" in (role or ""):
@@ -102,7 +104,13 @@ def build_game(mmdd, gid, png=False):
                     or resolve_pid_fallback(TEAM_NAME2CODE[tm], nm)
                 if pid:
                     return pid, nm
-        return st_page.get(tm) or (None, "")
+        nm = battery.get(tm, "")
+        if nm:
+            pid = (rids.get(tm) or {}).get(_norm_name(nm)) \
+                or resolve_pid_fallback(TEAM_NAME2CODE[tm], nm)
+            if pid:
+                return pid, nm
+        return None, ""
     stt = {away: starter_of(away, lu[0]), home: starter_of(home, lu[1])}
     res = []
     for tm, opp, l in ((away, home, lu[0]), (home, away, lu[1])):
