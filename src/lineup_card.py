@@ -152,6 +152,11 @@ def build(mmdd, gid, png=False):
     if len(res) < 2:
         print("lineup解析不能")
         return
+    build_from_results(res, mmdd, gid, png)
+
+
+def build_from_results(res, mmdd, gid, png=False):
+    """結果dict列(先攻,後攻)からカード生成(試合前カード9/8対応で分離)"""
     try:
         meta = parse_meta(mmdd, gid)
         date, venue = meta["date"], meta["venue"]

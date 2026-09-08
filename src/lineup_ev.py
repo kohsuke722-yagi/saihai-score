@@ -503,9 +503,17 @@ def analyze_lineup(mmdd, gid):
             dists.append(d)
         if not ok or len(dists) != 9:
             continue
-        # 9/9裁定: 探索は局所探索(素DP・数秒)・表示EVは走力込みDPで統一通貨に
-        # (検証: 走力は並びを±0.001級しか動かさないがEV水準を+0.3%上げる → 表示のみ精密化)
-        # バント方策(9/9裁定A): 実際EV=記述方策(実測π=監督文化の混合)・探索/最適EV=規範方策
+        out.append(analyze_team(tm, mmdd, players, dists, fixed, bench_bat))
+    return out
+
+
+def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
+    """1チーム分のエンジン評価(analyze_lineupから抽出・9/8試合前カード対応)。
+    players/dists=スタメン9人(打順順)・fixed=投手スロット・bench_bat=bench_roster野手側"""
+    # 9/9裁定: 探索は局所探索(素DP・数秒)・表示EVは走力込みDPで統一通貨に
+    # (検証: 走力は並びを±0.001級しか動かさないがEV水準を+0.3%上げる → 表示のみ精密化)
+    # バント方策(9/9裁定A): 実際EV=記述方策(実測π=監督文化の混合)・探索/最適EV=規範方策
+    if True:  # 抽出時のインデント維持
         tc = TEAM_NAME2CODE.get(tm, "")
         sp = speed_params(tc, players)
         pf = [i == fixed for i in range(9)]
@@ -600,17 +608,16 @@ def analyze_lineup(mmdd, gid):
             slots_pos = [exact_pos(p["role"]) for p in players]
             if not any(can_play(bench_best[0], pc) for pc in slots_pos if pc not in (None, "投")):
                 pinch_ace = bench_best[0]
-        out.append({"team": tm, "players": players, "fixed": fixed,
-                    "ev_actual": round(ev_act, 3), "ev_best": round(ev_best, 3),
-                    "diff": round(ev_act - ev_best, 3),
-                    "ev_actual_plain": round(ev_act_plain, 3),
-                    "ev_best_plain": round(ev_best_plain, 3),
-                    "best_order": [players[i]["name"] for i in best],
-                    "ev_bestmem": round(ev_bm, 3) if ev_bm else None,
-                    "bestmem_in": [f"{nm}({g})" for nm, g in swaps_in],
-                    "pinch_ace": pinch_ace,
-                    "bench_best": list(bench_best) if bench_best else None})
-    return out
+        return {"team": tm, "players": players, "fixed": fixed,
+                "ev_actual": round(ev_act, 3), "ev_best": round(ev_best, 3),
+                "diff": round(ev_act - ev_best, 3),
+                "ev_actual_plain": round(ev_act_plain, 3),
+                "ev_best_plain": round(ev_best_plain, 3),
+                "best_order": [players[i]["name"] for i in best],
+                "ev_bestmem": round(ev_bm, 3) if ev_bm else None,
+                "bestmem_in": [f"{nm}({g})" for nm, g in swaps_in],
+                "pinch_ace": pinch_ace,
+                "bench_best": list(bench_best) if bench_best else None}
 
 
 def main():
