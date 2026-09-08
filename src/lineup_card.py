@@ -96,23 +96,27 @@ def team_panel(r, side):
     def chain(d):
         chip = f'<span class="dchip">+{d:.2f}</span>' if d > 0.004 else ""
         return f'<div class="lchain">{chip}<span class="lar">▶</span></div>'
-    steps = [f'<div class="lstep now"><div class="lk">今日の並び</div>'
-             f'<div class="lv">{ev_a:.2f}<span class="unit2">点/試合</span></div>'
-             f'<div class="lin">発表スタメンの得点期待値</div></div>',
-             chain(max(0.0, ev_b - ev_a))]
-    if ev_m:
+    if ev_m:  # 3段: 添え書きを絞って数字を主役に(9/8社長「箱が3つで窮屈」対応)
         inn = "・".join(r.get("bestmem_in") or [])
-        steps += [f'<div class="lstep mid"><div class="lk">並べ替え最適</div>'
-                  f'<div class="lv">{ev_b:.2f}</div><div class="lin">同じ9人・並びだけ変更</div></div>',
-                  chain(ev_m - ev_b),
-                  f'<div class="lstep best"><div class="lk">ベストメンバー</div>'
-                  f'<div class="lv">{ev_m:.2f}<span class="lg2">+{ev_m - ev_a:.2f}</span></div>'
-                  f'<div class="lin">{inn} IN</div></div>']
+        steps = [f'<div class="lstep now"><div class="lk">今日の並び</div>'
+                 f'<div class="lv">{ev_a:.2f}</div></div>',
+                 chain(max(0.0, ev_b - ev_a)),
+                 f'<div class="lstep mid"><div class="lk">並べ替え最適</div>'
+                 f'<div class="lv">{ev_b:.2f}</div></div>',
+                 chain(ev_m - ev_b),
+                 f'<div class="lstep best" style="flex:1.5"><div class="lk">ベストメンバー</div>'
+                 f'<div class="lv">{ev_m:.2f}<span class="lg2">+{ev_m - ev_a:.2f}</span></div>'
+                 f'<div class="lin">{inn} IN</div></div>']
+        ladder = f'<div class="ladder l3">{"".join(steps)}</div>'
     else:
-        steps.append(f'<div class="lstep best"><div class="lk">この9人のベスト</div>'
-                     f'<div class="lv">{ev_b:.2f}<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div>'
-                     f'<div class="lin">並べ替えで到達 ─ メンバー入替の提案なし</div></div>')
-    ladder = f'<div class="ladder">{"".join(steps)}</div>'
+        steps = [f'<div class="lstep now"><div class="lk">今日の並び</div>'
+                 f'<div class="lv">{ev_a:.2f}<span class="unit2">点/試合</span></div>'
+                 f'<div class="lin">発表スタメンの得点期待値</div></div>',
+                 chain(max(0.0, ev_b - ev_a)),
+                 f'<div class="lstep best"><div class="lk">この9人のベスト</div>'
+                 f'<div class="lv">{ev_b:.2f}<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div>'
+                 f'<div class="lin">並べ替えで到達 ─ メンバー入替の提案なし</div></div>']
+        ladder = f'<div class="ladder">{"".join(steps)}</div>'
     rows_html = "".join(rows)
     return f'''
   <div class="panel" style="--tc:{col};--tg:{glow}">
@@ -273,6 +277,9 @@ def build_from_results(res, mmdd, gid, png=False):
   .unit2 {{ font-size:11px; font-weight:800; font-style:normal; color:#5f6f99; margin-left:3px; }}
   .lg2 {{ font-size:12.5px; font-weight:900; color:#0d9e55; margin-left:5px; }}
   .lin {{ font-size:10.5px; font-weight:900; color:#54648e; margin-top:1px; position:relative; z-index:1; }}
+  .ladder.l3 .lv {{ font-size:23px; }}
+  .ladder.l3 .lstep {{ padding:8px 10px; }}
+  .ladder.l3 .lchain {{ width:44px; }}
   .lchain {{ display:flex; flex-direction:column; align-items:center; justify-content:center;
             width:52px; flex:none; gap:2px; }}
   .dchip {{ background:#0d9e55; color:#fff; border-radius:99px; font-size:11.5px; font-weight:900;
