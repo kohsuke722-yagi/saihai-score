@@ -24,15 +24,51 @@ if hasattr(sys.stdout, "reconfigure"):
 
 MAX_PA_INN = 24  # 1イニングの打席打ち切り(確率質量はほぼ残らない)
 
+# バント方策の対象状態(3塁走者ありはスクイズ=別物・2死は非合理でDPも選ばない)
+BUNT_STATES = ("1", "2", "12")
 
-def _trans_table(dists):
-    """打者別×全(塁,アウト)の遷移リストを前計算"""
+
+def bunt_options(tm, names, dists, pitcher_flags):
+    """規範方策(9/9裁定A=規範で探索・B=野手も対象): リーグRE基準でev_bunt>ev_swingとなる
+    (塁,アウト)だけバント4分岐(個人巧拙・状況難度込み)へ差し替える方策表。
+    returns [dict{(st,o): bp4分岐dict}] — 静的判定なので遷移表の前計算と互換
+    (真の逐次最適は後ろ向き帰納が要るが打順文脈での判定反転は二次効果・plan-bunt-dp.md)"""
+    from phase1 import BUNT_P, personalize_bunt, state_adjust_bunt, ev_state, \
+        SUCC, HITST, LEADOUT
+    from analyze import re_of
+    out = []
+    for nm, d, is_p in zip(names, dists, pitcher_flags):
+        opt = {}
+        for st in BUNT_STATES:
+            bp = state_adjust_bunt(personalize_bunt(BUNT_P[is_p], is_p, tm, nm), st)
+            for o in (0, 1):
+                ev_b = (bp["succ"] * re_of(SUCC[st], o + 1)
+                        + bp["hit"] * re_of(HITST[st], o)
+                        + bp["leadout"] * re_of(LEADOUT[st], o + 1)
+                        + bp["fail"] * re_of(st, o + 1))
+                if ev_b > ev_state(st, o, d):
+                    opt[(st, o)] = bp
+        out.append(opt)
+    return out
+
+
+def _bunt_branches(st, o, bp):
+    """バント4分岐を素DPの遷移形式(p, runs, 次状態, 次アウト)に(対象状態は得点枝なし)"""
+    from phase1 import SUCC, HITST, LEADOUT
+    return [(bp["succ"], 0, SUCC[st], o + 1), (bp["hit"], 0, HITST[st], o),
+            (bp["leadout"], 0, LEADOUT[st], o + 1), (bp["fail"], 0, st, o + 1)]
+
+
+def _trans_table(dists, bunts=None):
+    """打者別×全(塁,アウト)の遷移リストを前計算(bunts=規範方策表で差し替え)"""
     T = []
-    for d in dists:
+    for i, d in enumerate(dists):
+        bo = bunts[i] if bunts else {}
         t = {}
         for st in ("", "1", "2", "3", "12", "13", "23", "123"):
             for o in (0, 1, 2):
-                t[(st, o)] = transitions(st, o, d)
+                bp = bo.get((st, o))
+                t[(st, o)] = _bunt_branches(st, o, bp) if bp else transitions(st, o, d)
         T.append(t)
     return T
 
@@ -61,9 +97,9 @@ def _inning(T, lead):
     return runs, dict(nxt)
 
 
-def game_ev(dists):
+def game_ev(dists, bunts=None):
     """この並びの期待得点(9イニング・先頭打者の持ち越し込み)"""
-    T = _trans_table(dists)
+    T = _trans_table(dists, bunts)
     inn = [_inning(T, i) for i in range(9)]
     lead = {0: 1.0}
     total = 0.0
@@ -116,12 +152,12 @@ def game_ev_from(T, order):
     return total
 
 
-def full_search(dists, fixed=None, topk=200):
+def full_search(dists, fixed=None, topk=200, bunts=None):
     """総当り(9/8社長要望): 投手固定なら8!=40,320通りを全評価。
     returns (best_order, best_ev, top_orders[(ev, order)降順])"""
     import heapq
     import itertools
-    T = _trans_table(dists)
+    T = _trans_table(dists, bunts)
     free = [i for i in range(9) if i != fixed]
     heap = []
     best_ev, best_order = -1.0, list(range(9))
@@ -237,10 +273,25 @@ def transitions_id(rid, outs, dist, sp):
     return E
 
 
-def game_ev_speed(dists, sp, order):
+def _bunt_branches_id(rid, o, bp, b):
+    """バント4分岐の走者ID版(対象状態は3塁走者なし=r3はNone)。bは打者のスロットidx"""
+    r1, r2, _ = rid
+    succ = (None, r1, r2)  # 全走者1つ進塁・打者アウト("1"→2塁,"2"→3塁,"12"→2,3塁)
+    if r1 is not None and r2 is not None:
+        hit, lead = (b, r1, r2), (b, r1, None)   # leadout=先頭走者(r2)が三塁封殺
+    elif r1 is not None:
+        hit, lead = (b, r1, None), (b, None, None)
+    else:
+        hit, lead = (b, None, r2), (b, None, None)
+    return [(bp["succ"], 0, succ, o + 1), (bp["hit"], 0, hit, o),
+            (bp["leadout"], 0, lead, o + 1), (bp["fail"], 0, rid, o + 1)]
+
+
+def game_ev_speed(dists, sp, order, bunts=None):
     """走力込みの精密EV(2段階探索の決勝用): 走者の身元を追跡し盗塁も遷移として挿入"""
     d9 = [dists[i] for i in order]
     s9 = [sp[i] for i in order]
+    b9 = [bunts[i] for i in order] if bunts else None
     inn = []
     for lead in range(9):
         frontier = {((None, None, None), 0, lead): 1.0}
@@ -271,7 +322,15 @@ def game_ev_speed(dists, sp, order):
                     if o0 >= 3:
                         nxt[b] += p0  # 盗塁死で3アウト: 次の回は同じ打者から
                         continue
-                    for pr, rn, nr, no in transitions_id(rid0, o0, d9[b], s9):
+                    bp_pol = None
+                    if b9:
+                        stc = ("1" if rid0[0] is not None else "") + \
+                              ("2" if rid0[1] is not None else "") + \
+                              ("3" if rid0[2] is not None else "")
+                        bp_pol = b9[b].get((stc, o0))
+                    trans = (_bunt_branches_id(rid0, o0, bp_pol, b) if bp_pol
+                             else transitions_id(rid0, o0, d9[b], s9))
+                    for pr, rn, nr, no in trans:
                         q = p0 * pr
                         runs += q * rn
                         nr2 = tuple(b if x == "B" else x for x in nr)
@@ -295,7 +354,7 @@ def game_ev_speed(dists, sp, order):
     return total
 
 
-def optimize(dists, fixed=None, restarts=3, seed_orders=None):
+def optimize(dists, fixed=None, restarts=3, seed_orders=None, bunts=None):
     """並びの局所探索(全ペア交換の山登り+再出発)。fixed=固定スロット(投手)。
     returns (best_order(индексы元スロット), best_ev)"""
     import itertools
@@ -303,7 +362,8 @@ def optimize(dists, fixed=None, restarts=3, seed_orders=None):
     free = [i for i in range(n) if i != fixed]
 
     def ev_of(order):
-        return game_ev([dists[i] for i in order])
+        return game_ev([dists[i] for i in order],
+                       [bunts[i] for i in order] if bunts else None)
 
     def climb(order):
         cur = list(order)
