@@ -225,6 +225,27 @@ def full_search(dists, fixed=None, topk=200, bunts=None):
     return best_order, best_ev, sorted(heap, reverse=True)
 
 
+def dist_short(pid, asof, half=15.0):
+    """短期記憶(半減期15日)の打者分布 — ベストメンバー候補の頑健性チェック用。
+    母体の較正半減期(batter_dist2)には触らない(9/8社長「減衰率おかしいのでは」への
+    二重時計ルール: 長短両方の記憶で上回る候補のみ提案)"""
+    from stats2 import _load, _decayed, _season_bat_counts, _self_w
+    from stats import fetch_player, LEAGUE, _blend
+    P = fetch_player(pid)
+    b = P.get("bat")
+    if P.get("pit") and ((b["PA"] - b["SH"]) if b else 0) < 60:
+        return dict(PITCHER_BAT)
+    blog, _ = _load()
+    rows = blog.get(pid, [])
+    sc, sn = _season_bat_counts(b) if b else (None, 0)
+    if sc is not None and asof < P.get("fetched", "0907"):
+        sc, sn = None, 0
+    if not rows and not b:
+        return dict(LEAGUE)
+    d, ne = _decayed(rows, asof, sc, sn, half)
+    return _blend(d, _self_w(ne, "b"))
+
+
 def recent_form(pid, asof, days=14):
     """直近days日の実出塁率(SH除外・10打席未満はNone)。フォーム注記用(9/8社長指摘)"""
     from stats2 import _load, _days
@@ -583,44 +604,93 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
             l = _dt.date(2026, int(d["last"][:2]), int(d["last"][2:]))
             return (a - l).days <= 30
 
-        cur_d = list(dists)
-        swaps_in, used_b, swap_slots = [], set(), {}
-        for _ in range(2):
-            base_ev0 = game_ev(cur_d)
-            trials = []
-            for si, p in enumerate(players):
-                pc = exact_pos(p["role"])
-                if pc in (None, "投"):
-                    continue
-                for nm, grp, pidc, dc, solo in cands:
-                    if nm in used_b or not can_play(nm, pc):
+        # ベストメンバー: 組み合わせ+再配置込み(9/8社長「噛み合いも考慮して」)。
+        # 「打者集合を選ぶ(打撃EV)+守備は適格割当が存在するか(Kuhn法マッチング)」に定式化。
+        # スターターの守備位置シャッフル(ダルベック一塁IN→玉突きで三塁に別の人等)も許容
+        import itertools as _it
+        field_slots = [i for i in range(9) if i != fixed]
+        POSL = [exact_pos(players[i]["role"]) for i in field_slots]
+
+        def elig(nm, pos, own=None):
+            return pos == "指" or pos == own or can_play(nm, pos)
+
+        def assignment(team_list):
+            """team_list=[(名前, 現ポジorNone)] を POSL へ全員割当できれば pos_idx->player_idx"""
+            adj = [[j for j, pos in enumerate(POSL) if elig(nm, pos, own)]
+                   for nm, own in team_list]
+            mp = [-1] * len(POSL)
+
+            def aug(i, vis):
+                for j in adj[i]:
+                    if j in vis:
                         continue
-                    trial = list(cur_d)
-                    trial[si] = dc
+                    vis.add(j)
+                    if mp[j] < 0 or aug(mp[j], vis):
+                        mp[j] = i
+                        return True
+                return False
+            for i in range(len(team_list)):
+                if not aug(i, set()):
+                    return None
+            return mp
+
+        base_ev0 = game_ev(dists)
+        # 二重時計ルール(9/8社長): 短期記憶(h=15日)の分布でもゲインが正の案のみ提案
+        dists_s = [dists[i] if i == fixed else dist_short(players[i]["pid"], mmdd)
+                   for i in range(9)]
+        base_s = game_ev(dists_s)
+        cands_s = {c[0]: dist_short(c[2], mmdd) for c in cands}
+        sols = []
+        for k in (1, 2):
+            for ins in _it.combinations(cands, k):
+                for outs in _it.combinations(range(len(field_slots)), k):
+                    team_list = [(players[si]["name"], POSL[ii])
+                                 for ii, si in enumerate(field_slots) if ii not in outs]
+                    team_list += [(c[0], None) for c in ins]
+                    mp = assignment(team_list)
+                    if mp is None:
+                        continue
+                    trial = list(dists)
+                    trial_s = list(dists_s)
+                    for c, oi in zip(ins, outs):
+                        trial[field_slots[oi]] = c[3]
+                        trial_s[field_slots[oi]] = cands_s[c[0]]
                     gain = game_ev(trial) - base_ev0
-                    if gain > 0.05:  # 微差の入替提案はしない
-                        trials.append((gain, si, nm, pc, dc, pidc))
-            if not trials:
-                break
-            # EVが誤差帯(0.02)内の複数案がある場合は本職(そのポジの先発数最多)を優先
-            # (9/8社長「ダルベックは3Bより1Bでは」— 守備の質は測れないため起用実績で代理)
-            gmax = max(t[0] for t in trials)
-            near = [t for t in trials if t[0] >= gmax - 0.02]
-            best_swap = max(near, key=lambda t: (DEF.get(f"{tm}|{t[2]}", {})
-                                                 .get(t[3], {}).get("n", 0)))
-            _, si, nm, pc, dc, pidc = best_swap
-            cur_d[si] = dc
-            used_b.add(nm)
-            # 直近フォーム注記(9/8社長「ダルベックは直近落ちてる」→INは総合力評価だと明示)
-            fr = recent_form(pidc, mmdd)
-            ob_dc = sum(dc.get(k, 0.0) for k in ("BB", "HBP", "1B", "2B", "3B", "HR"))
-            tag = ""
-            if fr is not None and fr <= ob_dc - 0.06:
-                tag = "・直近▼"
-            elif fr is not None and fr >= ob_dc + 0.06:
-                tag = "・直近▲"
-            swaps_in.append((nm, pc + tag))
-            swap_slots[si] = nm
+                    if gain <= 0.05:  # 微差の入替提案はしない
+                        continue
+                    if game_ev(trial_s) - base_s <= 0:  # 短期記憶で負→頑健でない
+                        continue
+                    # IN選手の割当先ポジ(表示用)と本職度(タイブレーク用)
+                    in_pos, fam = {}, 0
+                    n_stay = len(field_slots) - k
+                    for j, pi in enumerate(mp):
+                        if pi >= n_stay:
+                            nm_in = team_list[pi][0]
+                            in_pos[nm_in] = POSL[j]
+                            fam += DEF.get(f"{tm}|{nm_in}", {}).get(POSL[j], {}).get("n", 0)
+                    sols.append((gain, fam, ins, outs, in_pos))
+        swaps_in, swap_slots = [], {}
+        cur_d = list(dists)
+        if sols:
+            # 最良ゲイン±0.02の帯内では本職度(IN選手の割当ポジ先発数合計)を優先
+            # (9/8社長「3Bより1Bでは」— 守備の質は起用実績で代理)
+            gmax = max(s[0] for s in sols)
+            gain, fam, ins, outs, in_pos = max(
+                (s for s in sols if s[0] >= gmax - 0.02), key=lambda s: s[1])
+            for c, oi in zip(ins, outs):
+                nm, _grp, pidc, dc, _solo = c
+                si = field_slots[oi]
+                cur_d[si] = dc
+                swap_slots[si] = nm
+                # 直近フォーム注記(9/8社長「ダルベックは直近落ちてる」→総合力評価だと明示)
+                fr = recent_form(pidc, mmdd)
+                ob_dc = sum(dc.get(k2, 0.0) for k2 in ("BB", "HBP", "1B", "2B", "3B", "HR"))
+                tag = ""
+                if fr is not None and fr <= ob_dc - 0.06:
+                    tag = "・直近▼"
+                elif fr is not None and fr >= ob_dc + 0.06:
+                    tag = "・直近▲"
+                swaps_in.append((nm, in_pos.get(nm, "?") + tag))
         ev_bm = None
         if swaps_in:
             nms_bm = [swap_slots.get(i, nms[i]) for i in range(9)]
