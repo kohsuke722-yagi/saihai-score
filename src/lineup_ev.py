@@ -225,6 +225,18 @@ def full_search(dists, fixed=None, topk=200, bunts=None):
     return best_order, best_ev, sorted(heap, reverse=True)
 
 
+def recent_form(pid, asof, days=14):
+    """直近days日の実出塁率(SH除外・10打席未満はNone)。フォーム注記用(9/8社長指摘)"""
+    from stats2 import _load, _days
+    blog, _ = _load()
+    rows = [r for r in blog.get(pid, []) if 0 < _days(asof, r[0]) <= days]
+    pa = [r for r in rows if r[1] != "SH"]
+    if len(pa) < 10:
+        return None
+    ob = sum(1 for r in pa if r[1] in ("BB", "HBP", "1B", "2B", "3B", "HR"))
+    return ob / len(pa)
+
+
 def speed_params(tm, players):
     """スロットごとの走力(runpower実測・縮小つき): 進塁a2h/a13・併殺回避・盗塁(att,succ)"""
     try:
@@ -587,13 +599,21 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
                     trial[si] = dc
                     gain = game_ev(trial) - base_ev0
                     if gain > best_gain:
-                        best_gain, best_swap = gain, (si, nm, pc, dc)
+                        best_gain, best_swap = gain, (si, nm, pc, dc, pidc)
             if not best_swap:
                 break
-            si, nm, pc, dc = best_swap
+            si, nm, pc, dc, pidc = best_swap
             cur_d[si] = dc
             used_b.add(nm)
-            swaps_in.append((nm, pc))
+            # 直近フォーム注記(9/8社長「ダルベックは直近落ちてる」→INは総合力評価だと明示)
+            fr = recent_form(pidc, mmdd)
+            ob_dc = sum(dc.get(k, 0.0) for k in ("BB", "HBP", "1B", "2B", "3B", "HR"))
+            tag = ""
+            if fr is not None and fr <= ob_dc - 0.06:
+                tag = "・直近▼"
+            elif fr is not None and fr >= ob_dc + 0.06:
+                tag = "・直近▲"
+            swaps_in.append((nm, pc + tag))
             swap_slots[si] = nm
         ev_bm = None
         if swaps_in:
@@ -608,7 +628,34 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat):
             slots_pos = [exact_pos(p["role"]) for p in players]
             if not any(can_play(bench_best[0], pc) for pc in slots_pos if pc not in (None, "投")):
                 pinch_ace = bench_best[0]
+        # 主砲の置き場注記(9/8社長「佐々木はもっと前では」・§7-dの傾向表示/P4ゲート通過済み)
+        star_note = None
+        field_i = [i for i in range(9) if i != fixed]
+        star_i = max(field_i, key=lambda i: players[i]["solo"])
+        rest_i = [i for i in range(9) if i not in (star_i, fixed)]
+        curve = {}
+        for s in range(9):
+            if s == fixed:
+                continue
+            o = [None] * 9
+            if fixed is not None:
+                o[fixed] = fixed
+            o[s] = star_i
+            it = iter(rest_i)
+            for j in range(9):
+                if o[j] is None:
+                    o[j] = next(it)
+            curve[s] = game_ev([dists[i] for i in o], [b_norm[i] for i in o])
+        smax = max(curve, key=curve.get)
+        band_s = [s for s in curve if curve[smax] - curve[s] <= 0.003]
+        gain_s = curve[smax] - curve[star_i]
+        if star_i not in band_s and gain_s >= 0.01:
+            lo, hi = min(band_s) + 1, max(band_s) + 1
+            rng = f"{lo}番" if lo == hi else f"{lo}〜{hi}番"
+            star_note = (f"★{players[star_i]['name']}は{rng}配置が良さそう"
+                         f"(現{star_i + 1}番・+{gain_s:.2f}点の傾向)")
         return {"team": tm, "players": players, "fixed": fixed,
+                "star_note": star_note,
                 "ev_actual": round(ev_act, 3), "ev_best": round(ev_best, 3),
                 "diff": round(ev_act - ev_best, 3),
                 "ev_actual_plain": round(ev_act_plain, 3),

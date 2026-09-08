@@ -46,6 +46,8 @@ def insights(r):
         out.append(("good", f"出塁率上位3人を上位打順に集約(平均{avg_slot:.1f}番)"))
     else:
         out.append(("info", f"出塁率上位3人の平均打順は{avg_slot:.1f}番"))
+    if r.get("star_note"):
+        out.append(("good", r["star_note"]))
     if r.get("pinch_ace"):
         out.append(("info", f"ベンチに代打の切り札: {r['pinch_ace']}(直近は守備起用なし・温存が合理的)"))
     if r.get("fixed") is not None:
@@ -254,7 +256,8 @@ def build_from_results(res, mmdd, gid, png=False):
   {versus(res)}
   <div class="note">得点期待値=9イニング・中立環境換算(相手投手の質は含みません)。打力=その打者9人が並んだ場合の
   点/試合換算。ベストメンバーは同ポジション群(捕手/内野/外野)内の入替のみの参考値で、守備力・休養・疲労は
-  考慮していません。僅差は誤差の範囲です。計算方法はnoteで全公開。</div>
+  考慮していません(候補は直近フォームでなく減衰込みの総合力で評価。▼▲=直近2週の実出塁との乖離)。
+  僅差は誤差の範囲です。計算方法はnoteで全公開。</div>
   <div class="foot">@saihaiscore_lab(β試験運用)| 計算方法はnoteで全公開 | データ: NPB公式記録より自動集計</div>
 </div>
 </body></html>'''

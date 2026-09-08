@@ -52,6 +52,15 @@ def main():
                 d["n"] += 1
                 d["last"] = max(d["last"], mmdd)
     out = os.path.join(BASE, "data", "logs", "defense_starts.json")
+    # 空上書きガード(9/8実害: raw無しのActionsランナーが空dictで上書き→ベストメンバー全滅)
+    if not db and os.path.exists(out):
+        try:
+            old = json.load(open(out, encoding="utf-8"))
+        except Exception:
+            old = {}
+        if old:
+            print(f"WARN: 今回の集計が空(games={games})・既存{len(old)}件を保持して上書きしない")
+            return
     json.dump(db, open(out, "w", encoding="utf-8"), ensure_ascii=False)
     print(f"games={games} 選手×チーム={len(db)} saved: defense_starts.json")
 
