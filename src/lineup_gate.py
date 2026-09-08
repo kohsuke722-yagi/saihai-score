@@ -3,10 +3,13 @@
 - ブートストラップ: 減衰済み生カウント(PA原子)を再抽選→縮小を再適用(縮小後の再抽選は帯過小)
 - 共通乱数で実際/最適を対に・レプリケートごとに帯内再最適化(総当り上位K帯=検証①の密集実測が根拠)
 - optimism補正: 完璧監督(真の最適並び)の幻の見逃しphantomの平均を控除(Efron流のこの問題への翻案)
-- 三値判定: 有意な見逃し(補正後帯<0)/最適域(補正後点推定≥-0.02)/判定不能
-- 偽陽性テスト: 二重ブートストラップで「完璧監督に有罪を出す率」を実測(ゲート≤5%)
-Usage: python src/lineup_gate.py 0905 c-g-19 [--b 400] [--k 200]
-       python src/lineup_gate.py 0905 c-g-19 --fp [--m 40] [--b 120] [--k 50]
+- **判定線は帰無分布で較正(9/9裁定)**: 固定線「帯<0」は完璧監督の~27%を誤有罪にした
+  (平均補正では勝者の呪いの分散成分が残る)→ 完璧監督シミュM本の帯上端の帰無分布に対する
+  p値で有罪判定(p≤0.05)。FP≤5%は構成上保証・検出力は実測公開
+- 三値判定: 有意な見逃し(p≤0.05)/最適域(補正後点推定≥-0.02)/判定不能
+- 偽陽性テスト--fp: 三重ブートストラップで較正済み手続き自体のFPを検証(重い・夜間用)
+Usage: python src/lineup_gate.py 0905 c-g-19 [--b 400] [--k 200] [--mnull 40]
+       python src/lineup_gate.py 0905 c-g-19 --fp [--m 20] [--mnull 20] [--b 200]
 """
 import json
 import os
@@ -72,14 +75,14 @@ def resample(atoms, rng):
     return rng.choices(atoms, k=len(atoms))
 
 
-def gate_one(atoms9, fixed9, actual, band, B, rng, label=""):
-    """1チームのゲート判定。atoms9=打者別原子(固定はNone,dist)・band=候補並び(先頭=点推定最適)
-    returns dict(diff_hat, optimism, band95, verdict, ...)"""
+def gate_stat(atoms9, fixed9, actual, band, B, rng):
+    """検定統計量の計算(判定はしない)。atoms9=打者別原子(固定はNone,dist)・
+    band=候補並び(actualを含む前提)。returns dict(diff_hat, optimism, point_corr,
+    band95, istar=このデータが信じる最適並びのband内idx)"""
     d0 = [dist_of(a) if a else f for a, f in zip(atoms9, fixed9)]
-    ia = band.index(actual)  # bandはactualを含む前提(main側で保証)
+    ia = band.index(actual)
     evs0 = ev_orders(_trans_table(d0), band)
-    ev0_act = evs0[ia]
-    diff_hat = float(ev0_act - evs0.max())
+    diff_hat = float(evs0[ia] - evs0.max())
     istar = int(evs0.argmax())
     diffs, phantoms = [], []
     for _ in range(B):
@@ -93,16 +96,31 @@ def gate_one(atoms9, fixed9, actual, band, B, rng, label=""):
     corr = sorted(d - opt_bias for d in diffs)
     lo = corr[int(0.025 * len(corr))]
     hi = corr[min(len(corr) - 1, int(0.975 * len(corr)))]
-    point = diff_hat - opt_bias
-    if hi < 0:
-        verdict = "有意な見逃し"
-    elif point >= -OPT_ZONE:
-        verdict = "最適域"
+    return {"diff_hat": round(diff_hat, 4), "optimism": round(opt_bias, 4),
+            "point_corr": round(diff_hat - opt_bias, 4),
+            "band95": [round(lo, 4), round(hi, 4)], "istar": istar, "B": B}
+
+
+def null_band_his(atoms9, fixed9, opt_order, band, B, m_null, rng):
+    """帰無分布(9/9裁定): 完璧監督(=このデータが信じる最適並びを打つ)をm_null回
+    シミュレートし、各データセットの帯上端を集める → 判定線の較正に使う"""
+    his = []
+    for _ in range(m_null):
+        atoms_j = [resample(a, rng) if a else None for a in atoms9]
+        his.append(gate_stat(atoms_j, fixed9, opt_order, band, B, rng)["band95"][1])
+    return his
+
+
+def verdict_of(stat, his):
+    """帰無分布に対するp値で三値判定。p=(1+#{null帯上端≤観測帯上端})/(M+1)"""
+    p = (1 + sum(1 for h in his if h <= stat["band95"][1])) / (len(his) + 1)
+    if p <= 0.05:
+        v = "有意な見逃し"
+    elif stat["point_corr"] >= -OPT_ZONE:
+        v = "最適域"
     else:
-        verdict = "判定不能"
-    return {"label": label, "diff_hat": round(diff_hat, 4),
-            "optimism": round(opt_bias, 4), "point_corr": round(point, 4),
-            "band95": [round(lo, 4), round(hi, 4)], "verdict": verdict, "B": B}
+        v = "判定不能"
+    return v, round(p, 3)
 
 
 def load_atoms(mmdd, gid):
@@ -131,9 +149,10 @@ def main():
     def arg(k, dv):
         return int(args[args.index(k) + 1]) if k in args else dv
     fp_mode = "--fp" in args
-    B = arg("--b", 400)  # 高速化(lineup_fast)によりFPも本番設定で回す
+    B = arg("--b", 400)
     K = arg("--k", 200)
-    M = arg("--m", 100)
+    M = arg("--m", 20)
+    MN = arg("--mnull", 40 if not fp_mode else 20)
     rng = random.Random(20260909)
     results = []
     for tm, names, dists, fixed, atoms9, fixed9 in load_atoms(mmdd, gid):
@@ -144,24 +163,29 @@ def main():
         if actual not in band:
             band.append(actual)
         if not fp_mode:
-            r = gate_one(atoms9, fixed9, actual, band, B, rng, tm)
+            st = gate_stat(atoms9, fixed9, actual, band, B, rng)
+            his = null_band_his(atoms9, fixed9, band[st["istar"]], band, B, MN, rng)
+            v, p = verdict_of(st, his)
+            c5 = sorted(his)[int(0.05 * len(his))]
             sec = time.perf_counter() - t0
-            print(f"── {tm} ({sec:.0f}s) 素diff {r['diff_hat']:+.3f} "
-                  f"optimism {r['optimism']:+.3f} → 補正後 {r['point_corr']:+.3f} "
-                  f"帯95% [{r['band95'][0]:+.3f}, {r['band95'][1]:+.3f}]")
-            print(f"   判定: {r['verdict']}")
-            results.append(r)
+            print(f"── {tm} ({sec:.0f}s) 素diff {st['diff_hat']:+.3f} "
+                  f"optimism {st['optimism']:+.3f} → 補正後 {st['point_corr']:+.3f} "
+                  f"帯95% [{st['band95'][0]:+.3f}, {st['band95'][1]:+.3f}]")
+            print(f"   帰無5%線 {c5:+.3f} (M_null={MN}) p={p} → 判定: {v}")
+            results.append({**st, "team": tm, "p": p, "null_c5": round(c5, 4),
+                            "verdict": v})
         else:
-            # 偽陽性テスト: 真の分布=点推定・完璧監督=o_best。外側M個の観測データセットを生成し
-            # それぞれに内側ゲートを回して「有意な見逃し」率を実測
+            # 偽陽性テスト(三重ブートストラップ): 完璧監督=o_best(真の最適)。
+            # 外側M個の観測データセットそれぞれに較正済み手続き(統計量+帰無較正)を適用
             fp = 0
             for m in range(M):
                 atoms_m = [resample(a, rng) if a else None for a in atoms9]
-                r = gate_one(atoms_m, fixed9, o_best, band, B, rng)
-                if r["verdict"] == "有意な見逃し":
+                st = gate_stat(atoms_m, fixed9, o_best, band, B, rng)
+                his = null_band_his(atoms_m, fixed9, band[st["istar"]], band, B, MN, rng)
+                v, _p = verdict_of(st, his)
+                if v == "有意な見逃し":
                     fp += 1
-                if (m + 1) % 10 == 0:
-                    print(f"   {tm}: {m+1}/{M} 済 (FP {fp})")
+                print(f"   {tm}: {m+1}/{M} 済 (FP {fp})")
             rate = fp / M
             sec = time.perf_counter() - t0
             print(f"── {tm} 偽陽性率 {rate:.1%} ({fp}/{M}) "
