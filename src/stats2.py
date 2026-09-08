@@ -161,6 +161,40 @@ def pitcher_dist2(pid, P, inning, asof):
     return {k: v / s for k, v in mix.items()}
 
 
+K_SPLIT = 100.0  # 対左右スプリットの自立打席数(較正予定・9/8左右対応)
+
+
+def batter_dist2_vs(pid, P, asof, vs_hand):
+    """対左/対右スプリット分布(9/8左右対応): 窓内の該当打席(減衰)を
+    「総合分布×リーグ左右係数」の事前分布へ縮小ブレンド(k=K_SPLIT)。
+    利き腕不明・リーグ係数未整備ならNone(呼び出し側で総合分布を使う)"""
+    if vs_hand not in ("左", "右"):
+        return None
+    blog, _ = _load()
+    Lh = _meta.get(f"league_dist_vs{vs_hand}")
+    L = _meta.get("league_dist")
+    if not Lh or not L:
+        return None
+    base = batter_dist2(pid, P, asof)
+    pri = {k: max(1e-9, base.get(k, 0.0)) * max(1e-9, Lh.get(k, 0.0))
+           / max(1e-6, L.get(k, 1e-6)) for k in CLS}
+    s = sum(pri.values())
+    pri = {k: v / s for k, v in pri.items()}
+    wc = {k: 0.0 for k in CLS}
+    for r in blog.get(pid, []):
+        if len(r) < 5 or r[4] != vs_hand:
+            continue
+        o = FOLD.get(r[1], r[1])
+        if o not in wc or _days(asof, r[0]) <= 0:
+            continue
+        wc[o] += _w(asof, r[0], HALF_BAT)
+    n_eff = sum(wc.values())
+    w = n_eff / (n_eff + K_SPLIT)
+    d = {k: w * (wc[k] / n_eff if n_eff else 0.0) + (1 - w) * pri[k] for k in CLS}
+    s = sum(d.values())
+    return {k: v / s for k, v in d.items()}
+
+
 def effective_n(pid, kind, asof):
     """説明用: その選手の有効サンプル数(較正済み半減期を使用・9/7監査#27)"""
     blog, plog = _load()

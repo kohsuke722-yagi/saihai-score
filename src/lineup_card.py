@@ -21,7 +21,7 @@ def insights(r):
     ps = r["players"]
     out = []
     if r.get("matchup"):
-        out.append(("info", f"⚔ 本日の相手先発 {r['matchup']} 込みで換算(残りはリーグ平均ブルペン・左右別相性は未反映)"))
+        out.append(("info", f"⚔ 本日の相手先発 {r['matchup']} 込みで換算 ─ 打者ごとの対左/対右実績も反映(残りはリーグ平均ブルペン)"))
     elif "matchup" in r:
         out.append(("info", "相手先発 未反映(中立環境換算)"))
     bats = [p["bats"] for p in ps]
@@ -96,27 +96,22 @@ def team_panel(r, side):
     def chain(d):
         chip = f'<span class="dchip">+{d:.2f}</span>' if d > 0.004 else ""
         return f'<div class="lchain">{chip}<span class="lar">▶</span></div>'
-    if ev_m:  # 3段: 添え書きを絞って数字を主役に(9/8社長「箱が3つで窮屈」対応)
+    # 常に2箱(9/8社長「2つの方が見やすい」): 右箱=到達ベスト。入替提案は添え書きに畳む
+    steps = [f'<div class="lstep now"><div class="lk">今日の並び</div>'
+             f'<div class="lv">{ev_a:.2f}<span class="unit2">点/試合</span></div>'
+             f'<div class="lin">発表スタメンの得点期待値</div></div>']
+    if ev_m:
         inn = "・".join(r.get("bestmem_in") or [])
-        steps = [f'<div class="lstep now"><div class="lk">今日の並び</div>'
-                 f'<div class="lv">{ev_a:.2f}</div></div>',
-                 chain(max(0.0, ev_b - ev_a)),
-                 f'<div class="lstep mid"><div class="lk">並べ替え最適</div>'
-                 f'<div class="lv">{ev_b:.2f}</div></div>',
-                 chain(ev_m - ev_b),
-                 f'<div class="lstep best" style="flex:1.5"><div class="lk">ベストメンバー</div>'
-                 f'<div class="lv">{ev_m:.2f}<span class="lg2">+{ev_m - ev_a:.2f}</span></div>'
-                 f'<div class="lin">{inn} IN</div></div>']
-        ladder = f'<div class="ladder l3">{"".join(steps)}</div>'
+        steps += [chain(ev_m - ev_a),
+                  f'<div class="lstep best"><div class="lk">ベストメンバー(並べ替え込み)</div>'
+                  f'<div class="lv">{ev_m:.2f}<span class="lg2">+{ev_m - ev_a:.2f}</span></div>'
+                  f'<div class="lin">{inn} IN ─ 並べ替えのみなら{ev_b:.2f}</div></div>']
     else:
-        steps = [f'<div class="lstep now"><div class="lk">今日の並び</div>'
-                 f'<div class="lv">{ev_a:.2f}<span class="unit2">点/試合</span></div>'
-                 f'<div class="lin">発表スタメンの得点期待値</div></div>',
-                 chain(max(0.0, ev_b - ev_a)),
-                 f'<div class="lstep best"><div class="lk">この9人のベスト</div>'
-                 f'<div class="lv">{ev_b:.2f}<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div>'
-                 f'<div class="lin">並べ替えで到達 ─ メンバー入替の提案なし</div></div>']
-        ladder = f'<div class="ladder">{"".join(steps)}</div>'
+        steps += [chain(max(0.0, ev_b - ev_a)),
+                  f'<div class="lstep best"><div class="lk">この9人のベスト</div>'
+                  f'<div class="lv">{ev_b:.2f}<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div>'
+                  f'<div class="lin">並べ替えで到達 ─ メンバー入替の提案なし</div></div>']
+    ladder = f'<div class="ladder">{"".join(steps)}</div>'
     rows_html = "".join(rows)
     return f'''
   <div class="panel" style="--tc:{col};--tg:{glow}">
@@ -173,8 +168,8 @@ def build_from_results(res, mmdd, gid, png=False):
         date, venue = f"{int(mmdd[:2])}月{int(mmdd[2:])}日", ""
     ga = TEAMS.get(res[0]["team"], {}).get("glow", "41,183,255")
     gh = TEAMS.get(res[1]["team"], {}).get("glow", "255,183,3")
-    ev_note = ("得点期待値=9イニング換算・本日の相手先発込み(残りイニングはリーグ平均ブルペン想定・"
-               "左右別の相性は未反映)。" if all(r.get("matchup") for r in res) else
+    ev_note = ("得点期待値=9イニング換算・本日の相手先発込み(打者ごとの対左/対右実績を縮小つきで反映・"
+               "残りイニングはリーグ平均ブルペン想定)。" if all(r.get("matchup") for r in res) else
                "得点期待値=9イニング・中立環境換算(相手投手の質は含みません)。")
     html = f'''<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}

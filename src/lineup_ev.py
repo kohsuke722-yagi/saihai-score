@@ -239,15 +239,24 @@ def make_adjuster(opp_pid, mmdd, name_hint=""):
     w_sp = (min(0.75, max(0.35, q["TBF"] / g / 38.5))
             if g and q.get("TBF") else 0.58)
     L = league_meta().get("league_dist") or {}
+    hand = (P.get("throws") or "").strip()  # 左右スプリット切替(9/8「設計徹底」で実装)
 
-    def adj(d):
+    def adj(d, pid=None):
+        base = d
+        if pid and hand in ("左", "右"):
+            from stats2 import batter_dist2_vs
+            dv = batter_dist2_vs(pid, fetch_player(pid), mmdd, hand)
+            if dv:
+                base = dv  # 先発シェア分は打者の対利き腕分布(縮小つき)で合成
         num = {}
         for k in CLS:
-            num[k] = (max(1e-9, d.get(k, 0.0)) * max(1e-9, dp.get(k, 0.0))
+            num[k] = (max(1e-9, base.get(k, 0.0)) * max(1e-9, dp.get(k, 0.0))
                       / max(1e-4, L.get(k, 0.0)))
         s = sum(num.values())
         return {k: w_sp * num[k] / s + (1 - w_sp) * d.get(k, 0.0) for k in CLS}
     name = (P.get("name") or name_hint or "").replace("　", "").replace(" ", "")
+    if hand in ("左", "右"):
+        name += f"({hand})"
     return adj, name, w_sp
 
 
@@ -601,7 +610,7 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=None):
                 continue
             dc = batter_dist2(pid, P, mmdd)
             if adj:
-                dc = adj(dc)
+                dc = adj(dc, pid)
             solo = game_ev([dc] * 9)
             cands.append((nm, grp, pid, dc, solo))
             if bench_best is None or solo > bench_best[1]:
@@ -667,7 +676,7 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=None):
         # 二重時計ルール(9/8社長): 短期記憶(h=15日)の分布でもゲインが正の案のみ提案
         def _short(pid):
             d = dist_short(pid, mmdd)
-            return adj(d) if adj else d
+            return adj(d, pid) if adj else d
         dists_s = [dists[i] if i == fixed else _short(players[i]["pid"])
                    for i in range(9)]
         base_s = game_ev(dists_s)

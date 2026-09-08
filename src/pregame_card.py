@@ -138,7 +138,7 @@ def build_game(mmdd, gid, png=False):
         opp_pid, opp_nm = stt.get(opp) or (None, "")
         if opp_pid:
             adj, sp_name, w_sp = make_adjuster(opp_pid, mmdd, name_hint=opp_nm)
-            dists = [adj(d) for d in dists]
+            dists = [adj(d, p["pid"]) for d, p in zip(dists, players)]
         r = analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=adj)
         r["matchup"] = sp_name or None
         res.append(r)

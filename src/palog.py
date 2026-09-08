@@ -68,6 +68,10 @@ def name_id_map(html):
 
 def build():
     batters, pitchers, unknown = {}, {}, {}
+    try:  # 相手投手の利き腕注釈(9/8左右スプリット対応)
+        HAND = json.load(open(os.path.join(LOGS, "handedness.json"), encoding="utf-8"))
+    except Exception:
+        HAND = {}
     # リーグ実測カウンタ
     M = {"adv_1b_r2": [0, 0],      # 1Bで二塁走者が生還したか(r3なし状況)
          "adv_1b_r1to3": [0, 0],   # 1Bで一塁走者が三塁へ(r1のみ状況)
@@ -139,7 +143,10 @@ def build():
                     continue
                 bid = rid(e["team"], bname)
                 if bid:
-                    batters.setdefault(bid, []).append([mmdd, cls, st, outs])
+                    # 5列目=相手投手の利き腕(左/右/空)。既存リーダーはidx0-3参照なので後方互換
+                    ppid = rid(defense, cur_p.get(defense, "")) if cur_p.get(defense) else None
+                    ph = (HAND.get(ppid) or {}).get("throws", "") if ppid else ""
+                    batters.setdefault(bid, []).append([mmdd, cls, st, outs, ph])
                 pname = cur_p.get(defense)
                 pid = rid(defense, pname) if pname else None
                 if pid:
@@ -162,15 +169,23 @@ def build():
     # 実測リーグ分布(9/8打順レビュー#3: ハードコードの縮小先が実リーグ比+0.44点の架空打者
     # だった問題の修正。stats.pyが縮小先・オッズ基準にこれを使う)
     lgc = {}
+    lgc_h = {"左": {}, "右": {}}  # リーグの対左/対右投手別分布(9/8左右スプリット対応)
     for rows in batters.values():
         for r in rows:
             c = {"OUT_G": "OUT", "OUT_A": "OUT", "DP": "OUT"}.get(r[1], r[1])
             if c in ("SH", "IBB"):
                 continue
             lgc[c] = lgc.get(c, 0) + 1
+            ph = r[4] if len(r) > 4 else ""
+            if ph in lgc_h:
+                lgc_h[ph][c] = lgc_h[ph].get(c, 0) + 1
     tot_lg = sum(lgc.values())
     if tot_lg:
         meta["league_dist"] = {k: round(v / tot_lg, 5) for k, v in lgc.items()}
+    for hh, cc in lgc_h.items():
+        tot = sum(cc.values())
+        if tot >= 5000:
+            meta[f"league_dist_vs{hh}"] = {k: round(v / tot, 5) for k, v in cc.items()}
     json.dump(meta, open(os.path.join(LOGS, "meta.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     npa_b = sum(len(v) for v in batters.values())
     print(f"games={n_games} batters={len(batters)}({npa_b}打席) pitchers={len(pitchers)} 不明結果={len(unknown)}種")

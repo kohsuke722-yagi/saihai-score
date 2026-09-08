@@ -44,7 +44,7 @@ def commit_marker(mmdd, gid, note="posted"):
         return subprocess.run(["git", "-C", BASE, *a], capture_output=True, text=True)
     g("config", "user.name", "saihai-bot")
     g("config", "user.email", "actions@users.noreply.github.com")
-    for attempt in range(5):  # 同時終了した他試合ジョブとのpush競合をリトライで解決
+    for attempt in range(10):  # push競合をリトライで解決(9/8: 5回で突破できず二重配達→10回+長め退避)
         g("add", "data/posted", "data/players")
         g("commit", "-m", f"{note}: {mmdd} {gid}")
         g("pull", "--rebase")
@@ -52,7 +52,7 @@ def commit_marker(mmdd, gid, note="posted"):
         if r.returncode == 0:
             print("marker pushed")
             return
-        time.sleep(5 + attempt * 5)
+        time.sleep(8 + attempt * 8)
     print("WARN: marker push失敗(配達自体は完了)")
 
 
@@ -77,6 +77,14 @@ def main():
             return
         print(f"{gid}: {'終了!' if done else '試合中/未開始...'}", flush=True)
         if done:
+            # 配達直前にリモートのマーカーを再確認(9/8実害: マーカーpush失敗×ジョブ再起動で
+            # 二重配達。起動時チェックだけでは他ジョブの配達を見逃す)
+            if os.environ.get("GITHUB_ACTIONS"):
+                subprocess.run(["git", "-C", BASE, "pull", "--rebase"],
+                               capture_output=True, text=True)
+                if os.path.exists(os.path.join(BASE, "data", "posted", mmdd, gid)):
+                    print(f"{gid}: 配達済みマーカーをリモートで検出→スキップ", flush=True)
+                    return
             save(os.path.join(RAW, mmdd, gid, "box.html"), box)
             for page in ("playbyplay.html", "index.html", "roster.html"):
                 save(os.path.join(RAW, mmdd, gid, page),
