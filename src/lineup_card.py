@@ -85,23 +85,29 @@ def team_panel(r, side):
       </div>''')
     ins = "".join(f'<div class="ins {c}">{txt}</div>' for c, txt in insights(r))
     # EVラダー: 今日の並び → 並べ替え → ベストメンバー(同ポジ群制約・IN選手のみ実名)
-    # ラダー: 一番目立つ箱には常に「到達できるベストの数字」を入れる(9/8社長
-    # 「現メンバーがベストだと並びもベストに読める」指摘 — 入替なし時は並べ替え最適を主役に)
+    # ラダー: 一番目立つ箱には常に「到達できるベストの数字」(9/8社長指摘の誤読解消)。
+    # 空白が多い=しょぼい指摘→数字大型化・チーム色グラデ枠・矢印に+チップでリッチに
     ev_a, ev_b, ev_m = r["ev_actual"], r["ev_best"], r.get("ev_bestmem")
-    steps = [f'<div class="lstep"><div class="lk">今日の並び</div><div class="lv">{ev_a:.2f}</div></div>',
-             '<div class="larr">▶</div>']
+
+    def chain(d):
+        chip = f'<span class="dchip">+{d:.2f}</span>' if d > 0.004 else ""
+        return f'<div class="lchain">{chip}<span class="lar">▶</span></div>'
+    steps = [f'<div class="lstep now"><div class="lk">今日の並び</div>'
+             f'<div class="lv">{ev_a:.2f}<span class="unit2">点/試合</span></div>'
+             f'<div class="lin">発表スタメンの得点期待値</div></div>',
+             chain(max(0.0, ev_b - ev_a))]
     if ev_m:
         inn = "・".join(r.get("bestmem_in") or [])
-        steps += [f'<div class="lstep"><div class="lk">並べ替え最適</div><div class="lv">{ev_b:.2f}'
-                  f'<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div></div>',
-                  '<div class="larr">▶</div>',
+        steps += [f'<div class="lstep mid"><div class="lk">並べ替え最適</div>'
+                  f'<div class="lv">{ev_b:.2f}</div><div class="lin">同じ9人・並びだけ変更</div></div>',
+                  chain(ev_m - ev_b),
                   f'<div class="lstep best"><div class="lk">ベストメンバー</div>'
                   f'<div class="lv">{ev_m:.2f}<span class="lg2">+{ev_m - ev_a:.2f}</span></div>'
                   f'<div class="lin">{inn} IN</div></div>']
     else:
-        steps.append(f'<div class="lstep best"><div class="lk">この9人のベスト(並べ替えで到達)</div>'
+        steps.append(f'<div class="lstep best"><div class="lk">この9人のベスト</div>'
                      f'<div class="lv">{ev_b:.2f}<span class="lg2">+{max(0.0, ev_b - ev_a):.2f}</span></div>'
-                     f'<div class="lin">メンバー入替の提案なし</div></div>')
+                     f'<div class="lin">並べ替えで到達 ─ メンバー入替の提案なし</div></div>')
     ladder = f'<div class="ladder">{"".join(steps)}</div>'
     rows_html = "".join(rows)
     return f'''
@@ -157,6 +163,8 @@ def build_from_results(res, mmdd, gid, png=False):
         date, venue = meta["date"], meta["venue"]
     except Exception:
         date, venue = f"{int(mmdd[:2])}月{int(mmdd[2:])}日", ""
+    ga = TEAMS.get(res[0]["team"], {}).get("glow", "41,183,255")
+    gh = TEAMS.get(res[1]["team"], {}).get("glow", "255,183,3")
     html = f'''<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   body {{ width:1080px; height:1250px; color:#1c2340; overflow:hidden; position:relative;
@@ -165,6 +173,8 @@ def build_from_results(res, mmdd, gid, png=False):
            conic-gradient(from 178deg at 50% -14%, transparent 0 34%, rgba(255,255,255,.14) 37%,
              transparent 40%, rgba(255,255,255,.1) 45%, transparent 48%, rgba(255,255,255,.14) 53%,
              transparent 56%, rgba(255,255,255,.1) 61%, transparent 64%),
+           radial-gradient(880px 620px at -4% 30%, rgba({ga},.55), transparent 62%),
+           radial-gradient(880px 620px at 104% 30%, rgba({gh},.55), transparent 62%),
            linear-gradient(135deg, #29b7ff 0%, #6d5dff 34%, #ff5fa8 68%, #ffb703 100%); }}
   body::before {{ content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
     background-image:
@@ -236,17 +246,31 @@ def build_from_results(res, mmdd, gid, png=False):
   .sheen {{ position:absolute; inset:0; border-radius:99px;
            background:repeating-linear-gradient(115deg, transparent 0 10px, rgba(255,255,255,.28) 10px 14px); }}
   .pv {{ width:36px; flex:none; text-align:right; font-size:14px; font-weight:900; color:#1c2340; }}
-  .ladder {{ display:flex; gap:7px; margin-top:10px; align-items:stretch; }}
-  .lstep {{ flex:1; border-radius:13px; padding:8px 11px; background:#f5f7fc; border:2px solid #e3e9f5; }}
+  .ladder {{ display:flex; gap:4px; margin-top:11px; align-items:stretch; }}
+  .lstep {{ flex:1; border-radius:14px; padding:9px 13px; position:relative; overflow:hidden; }}
+  .lstep.now {{ background:linear-gradient(135deg, rgba(var(--tg),.2), #f2f5fb 75%);
+              border:2px solid rgba(var(--tg),.6); }}
+  .lstep.now .lv {{ color:var(--tc); }}
+  .lstep.now::after {{ content:""; position:absolute; right:-18px; top:-18px; width:64px; height:64px;
+              border-radius:50%; background:rgba(var(--tg),.16); }}
+  .lstep.mid {{ background:#f5f7fc; border:2px solid #e3e9f5; }}
   .lstep.best {{ background:linear-gradient(120deg,#ffd166,#ff9770); border:2px solid #ff7b54;
                box-shadow:4px 4px 0 rgba(255,123,84,.35); }}
+  .lstep.best::after {{ content:""; position:absolute; inset:0;
+     background:repeating-linear-gradient(-55deg, transparent 0 16px, rgba(255,255,255,.18) 16px 22px); }}
   .lstep.best .lk {{ color:#7c2d12; }} .lstep.best .lv {{ color:#4a1c06; }}
   .lstep.best .lg2 {{ color:#0b6e3a; }} .lstep.best .lin {{ color:#7c2d12; }}
   .lk {{ font-size:10.5px; font-weight:900; letter-spacing:1px; color:#66718c; }}
-  .lv {{ font-size:22px; font-weight:900; color:#1c2340; }}
-  .lg2 {{ font-size:12px; font-weight:900; color:#0d9e55; margin-left:4px; }}
-  .lin {{ font-size:11px; font-weight:900; color:#9a7208; margin-top:1px; }}
-  .larr {{ align-self:center; color:#b7c1dd; font-size:14px; font-weight:900; }}
+  .lv {{ font-size:27px; font-weight:900; color:#1c2340; font-style:italic; line-height:1.15;
+        position:relative; z-index:1; }}
+  .unit2 {{ font-size:11px; font-weight:800; font-style:normal; color:#8b96ab; margin-left:3px; }}
+  .lg2 {{ font-size:12.5px; font-weight:900; color:#0d9e55; margin-left:5px; }}
+  .lin {{ font-size:10.5px; font-weight:900; color:#8b96ab; margin-top:1px; position:relative; z-index:1; }}
+  .lchain {{ display:flex; flex-direction:column; align-items:center; justify-content:center;
+            width:52px; flex:none; gap:2px; }}
+  .dchip {{ background:#0d9e55; color:#fff; border-radius:99px; font-size:11.5px; font-weight:900;
+           padding:1px 9px; box-shadow:0 3px 8px rgba(13,158,85,.45); }}
+  .lar {{ color:#c3cce4; font-size:15px; font-weight:900; }}
   .ins {{ margin-top:6px; border-radius:10px; padding:6px 11px; font-size:12.5px; font-weight:800; }}
   .ins.good {{ background:#dcf7e9; color:#0b7a42; }}
   .ins.warn {{ background:#ffe8e0; color:#b4432a; }}
