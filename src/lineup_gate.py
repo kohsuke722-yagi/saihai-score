@@ -163,9 +163,12 @@ def main():
     K = arg("--k", 200)
     M = arg("--m", 20)
     MN = arg("--mnull", 40 if not fp_mode else 20)
+    tgt = args[args.index("--team") + 1] if "--team" in args else None
     rng = random.Random(20260909)
     results = []
     for tm, names, dists, fixed, atoms9, fixed9 in load_atoms(mmdd, gid):
+        if tgt and tm != tgt:
+            continue
         t0 = time.perf_counter()
         o_best, _, top = fast_full_search(dists, fixed=fixed, topk=K)
         band = [o for _, o in sorted(top, reverse=True)]
@@ -206,7 +209,8 @@ def main():
                   f"{'合格(≤5%)' if rate <= 0.05 else '不合格'} ({sec:.0f}s)")
             results.append({"team": tm, "fp": fp, "M": M, "rate": rate})
     outp = os.path.join(BASE, "data", "out", mmdd,
-                        f"gate_{'fp_' if fp_mode else ''}{gid}.json")
+                        f"gate_{'fp_' if fp_mode else ''}{gid}"
+                        f"{('_' + tgt) if tgt else ''}.json")
     json.dump(results, open(outp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print("saved:", outp)
 
