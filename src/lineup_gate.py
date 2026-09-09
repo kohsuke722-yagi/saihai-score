@@ -340,7 +340,7 @@ def main():
             v, _p = verdict_of(st, his)
             if v == "有意な見逃し":
                 fp += 1
-            print(f"   {tm}: {m+1}/{M} 済 (FP {fp})")
+            print(f"   {tm}: {m+1}/{M} 済 (FP {fp})", flush=True)
         rate = fp / M
         sec = time.perf_counter() - t0
         print(f"── {tm} 偽陽性率 {rate:.1%} ({fp}/{M}) "

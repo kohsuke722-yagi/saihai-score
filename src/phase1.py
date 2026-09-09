@@ -513,6 +513,7 @@ def analyze_ph(mmdd, gid):
                     pslot[tm] = s0
     seq = {away: 0, home: 0}
     score = {away: 0, home: 0}
+    ph_removed = {}  # チーム→投手スロットに代打を出したか(またぎ続投の適格性・9/9フェーズ3)
     bf = {}               # 投手名→この試合の対戦打者数(巡目計算用)
     day_pa = {}           # 投手名→当日ここまでの被打結果クラス列(A-3: 当日の出来ブレンド用)
     entry_inning = {}     # 投手名→登板した回
@@ -542,10 +543,12 @@ def analyze_ph(mmdd, gid):
                                            "old_entry": entry_inning.get(ok, 1),
                                            "day_old": list(day_pa.get(ok, [])),
                                            "at_head": half_pa.get((e["inning"], e["half"]), 0) == 0,
+                                           "old_ph_removed": ph_removed.get(defense, False),
                                            "inning": e["inning"], "half": e["half"]})
                     # ③相手反応: 指示時点の打順上の打者(相手が代打で応じる前)も控える(9/7設計)
                 cur_pitcher[defense] = new
                 entry_inning[f"{defense}|{new}"] = e["inning"]
+                ph_removed[defense] = False  # 新投手が入った=代打消化済みフラグを解除
                 # セ: 新投手は退いた投手(または代打済み枠)の打順スロットに入る(9/7監査#8)。
                 # ダブルスイッチは検出不能のため同枠仮定(NPBでは稀・注記)
                 if defense in pslot:
@@ -616,6 +619,8 @@ def analyze_ph(mmdd, gid):
                                 "orig": slots[team].get(s), "next": nxt, "diff": diff,
                                 "bases": e.get("bases"), "pitcher": cur_pitcher.get(defense)})
                 slots[team][s] = ph_name
+                if s == pslot.get(team):
+                    ph_removed[team] = True  # 投手枠に代打=またぎ続投は不可(9/9フェーズ3)
             else:
                 slots[team][s] = bat
             continue
@@ -643,6 +648,8 @@ def analyze_ph(mmdd, gid):
                             "diff": diff, "bases": e.get("bases"),
                             "pitcher": cur_pitcher.get(defense)})
             slots[team][s] = ph_name
+            if s == pslot.get(team):
+                ph_removed[team] = True  # 投手枠に代打=またぎ続投は不可(9/9フェーズ3)
         else:
             slots[team][s] = bat
 
@@ -897,6 +904,33 @@ def analyze_ph(mmdd, gid):
                             if wv is not None:
                                 # 今日の失点はWP(=大差なら自動で軽い)・明日のコストは平均レバレッジ
                                 wvals[pid_c] = wv + fc_c * R2W_AVG
+                    # またぎ続投を対抗手に追加(9/7残穴#1・9/9フェーズ3): 前の回の投手を
+                    # もう1回=当日結果ブレンド+負荷+またぎ乗数。投手枠に代打消化済みなら不可(セ)。
+                    # 可用性コストは登板単位の簿記なので追加登板なし=0(近似・明記)
+                    pid_ol = pid_of(r["def_team"], r["old"])
+                    if pid_ol and not r.get("old_ph_removed"):
+                        P_ol = fetch_player(pid_ol)
+                        pd_ol = pitcher_dist2(pid_ol, P_ol, inning, asof)
+                        day_o = r.get("day_old") or []
+                        if day_o:
+                            w_d = len(day_o) / (len(day_o) + 45.0)
+                            cnt_o = {}
+                            for c_ in day_o:
+                                cnt_o[c_] = cnt_o.get(c_, 0) + 1
+                            pd_ol = {k2: (1 - w_d) * pd_ol.get(k2, 0.0)
+                                     + w_d * cnt_o.get(k2, 0) / len(day_o)
+                                     for k2 in set(pd_ol) | set(cnt_o)}
+                        pd_ol = ob_mult(ob_mult(pd_ol, load_mult(pid_ol, asof)[0]),
+                                        PCTX.get("cross", 1.0))
+                        ds_ol = opt_dists(lambda i2, _p=pd_ol: _p, P_ol.get("throws", "右"))
+                        ev_ol = ev_chain(ds_ol)
+                        if ev_ol is not None:
+                            evals[pid_ol] = ev_ol
+                            rec0["cross_ev"] = round(ev_ol, 3)
+                            if HAS_WP:
+                                wv_ol = wp_chain(ds_ol)
+                                if wv_ol is not None:
+                                    wvals[pid_ol] = wv_ol
                     if pid_nw in evals:
                         best = min(evals, key=evals.get)
                         rec0["head_best"] = _HAND.get(best, {}).get("name", r["new"] if best == pid_nw else best)
