@@ -11,8 +11,12 @@
 - 運用(9/9フェーズ1): 判定JSONは data/gates/{mmdd}/ へ(コミット対象・カードが読む)。
   --pregame=試合前モード(rawのbox/rosterから読む・軽量設定でカード配達前に実行)、
   省略=夜間本走({gid}_final.json・本走設定B400/MN40)
+- 検出力実測--power(9/9フェーズ2): 合成オフェンダー(真のEVからdだけ劣る並び)への
+  有罪判定率をFPテストと同じ三重ブートストラップで測る。既定は試合前運用設定(B200/MN20)
+  =配達実物の検出力。「どのくらいの見逃しなら一晩で捕まえられるか」のnote公開用
 Usage: python src/lineup_gate.py 0905 c-g-19 [--b 400] [--k 200] [--mnull 40] [--pregame]
        python src/lineup_gate.py 0905 c-g-19 --fp [--m 20] [--mnull 20] [--b 200]
+       python src/lineup_gate.py 0905 c-g-19 --power [--m 12] [--levels 0.02,0.03,0.05]
 """
 import json
 import os
@@ -244,6 +248,52 @@ def run_gate(mmdd, gid, B=400, K=200, MN=40, pregame=False, team=None):
     return results
 
 
+def power_run(mmdd, gid, B, K, MN, M, levels, team=None, pregame=False):
+    """検出力の実測: 各水準dごとに「真のEV(観測分布d0上)からd劣る並び」を実際の並びとして
+    較正済み手続きにかけ、『有意な見逃し』が出る率を測る。FPテスト(d=0)の一般化。
+    オフェンダーは総当り全件から目標EV差に最近接の並びを採用(達成値achievedを併記)"""
+    rng = random.Random(20260909)
+    loader = load_atoms_pregame if pregame else load_atoms
+    out = []
+    for tm, names, dists, fixed, atoms9, fixed9 in loader(mmdd, gid):
+        if team and tm != team:
+            continue
+        _, best_ev, pool = fast_full_search(dists, fixed=fixed, topk=40320)
+        pool_sorted = sorted(pool, reverse=True)
+        band = [o for _, o in pool_sorted[:K]]
+        res_t = {"team": tm, "levels": []}
+        for d in levels:
+            ev_o, off = min(pool_sorted, key=lambda t: abs(t[0] - (best_ev - d)))
+            achieved = float(best_ev - ev_o)
+            band_l = band if off in band else band + [off]
+            det = 0
+            t0 = time.perf_counter()
+            for m in range(M):
+                atoms_m = [resample(a, rng) if a else None for a in atoms9]
+                st = gate_stat(atoms_m, fixed9, off, band_l, B, rng)
+                dl = DELTA_BAND + abs(st["optimism"])
+                his = null_band_his(atoms_m, fixed9, band_l, B, MN, rng, delta=dl)
+                v, _p = verdict_of(st, his)
+                det += (v == "有意な見逃し")
+                print(f"   {tm} d={achieved:.3f}: {m + 1}/{M} 済 (検出{det})", flush=True)
+            sec = time.perf_counter() - t0
+            print(f"── {tm} 真の見逃し {achieved:+.3f}点/試合 → 検出率 {det}/{M}"
+                  f" = {det / M:.0%} ({sec:.0f}s)", flush=True)
+            res_t["levels"].append({"level": d, "achieved": round(achieved, 4),
+                                    "detect": det, "M": M,
+                                    "rate": round(det / M, 3)})
+        out.append(res_t)
+    outp = os.path.join(BASE, "data", "out", mmdd, f"power_{gid}.json")
+    os.makedirs(os.path.dirname(outp), exist_ok=True)
+    json.dump({"mmdd": mmdd, "gid": gid,
+               "settings": {"B": B, "K": K, "M_null": MN, "M": M,
+                            "delta": DELTA_BAND, "opt_zone": OPT_ZONE},
+               "teams": out}, open(outp, "w", encoding="utf-8"),
+              ensure_ascii=False, indent=1)
+    print("saved:", outp)
+    return out
+
+
 def main():
     mmdd, gid = sys.argv[1], sys.argv[2]
     args = sys.argv[3:]
@@ -251,12 +301,20 @@ def main():
     def arg(k, dv):
         return int(args[args.index(k) + 1]) if k in args else dv
     fp_mode = "--fp" in args
+    power_mode = "--power" in args
     pregame = "--pregame" in args
-    B = arg("--b", 400)
+    B = arg("--b", 200 if power_mode else 400)
     K = arg("--k", 200)
-    M = arg("--m", 20)
-    MN = arg("--mnull", 40 if not fp_mode else 20)
+    M = arg("--m", 12 if power_mode else 20)
+    MN = arg("--mnull", 20 if (fp_mode or power_mode) else 40)
     tgt = args[args.index("--team") + 1] if "--team" in args else None
+    if power_mode:
+        levels = [float(x) for x in
+                  (args[args.index("--levels") + 1] if "--levels" in args
+                   else "0.02,0.03,0.05").split(",")]
+        power_run(mmdd, gid, B=B, K=K, MN=MN, M=M, levels=levels,
+                  team=tgt, pregame=pregame)
+        return
     if not fp_mode:
         run_gate(mmdd, gid, B=B, K=K, MN=MN, pregame=pregame, team=tgt)
         return

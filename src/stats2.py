@@ -39,7 +39,7 @@ except Exception:
 def _self_w(n_eff, kind):
     form, prm = _SHRINK[kind]
     return min(1.0, n_eff / prm) if form == "cap" else n_eff / (n_eff + prm)
-CLS = ("BB", "HBP", "K", "1B", "2B", "3B", "HR", "OUT")
+CLS = ("BB", "HBP", "K", "1B", "2B", "3B", "HR", "OUT", "ROE")  # ROE=失策出塁(9/9フェーズ2)
 FOLD = {"OUT_G": "OUT", "OUT_A": "OUT", "DP": "OUT"}  # 分布上はアウトに畳む(併殺・ゴロ率は別関数で使う)
 
 _blog = _plog = _meta = None

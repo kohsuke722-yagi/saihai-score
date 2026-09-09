@@ -358,7 +358,7 @@ def transitions_id(rid, outs, dist, sp):
                 term(pp * (1 - ao3), 0, r1, r2, r3, outs + 1)
             else:
                 term(pp, 0, r1, r2, r3, outs + 1)
-        elif o == "1B":
+        elif o in ("1B", "ROE"):  # ROE=失策出塁: 単打と同じ進塁構造(§3・9/9フェーズ2)
             base = 1 if r3 is not None else 0
             if r2 is not None:
                 for pr, sc in ((a2h, True), (1 - a2h, False)):
@@ -422,7 +422,7 @@ def load_blend(fixed):
         return None
     if not ld or not PB.get("pitcher"):
         return None
-    onbase = ("1B", "2B", "3B", "HR", "BB", "HBP")
+    onbase = ("1B", "2B", "3B", "HR", "BB", "HBP", "ROE")
     rp, rn = PC.get("rate_ph", 0.285), PC.get("rate_norm", 0.307)
     ob = sum(ld.get(k, 0.0) for k in onbase)
     orr = (rp / (1 - rp)) / (rn / (1 - rn))

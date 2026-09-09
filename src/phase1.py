@@ -321,7 +321,7 @@ def transitions(state, outs, dist, p_dp=None, adv=None):
                 term(p * (1 - A["ao3"]), 0, r1, r2, r3, outs + 1)
             else:
                 term(p, 0, r1, r2, r3, outs + 1)
-        elif o == "1B":
+        elif o in ("1B", "ROE"):  # ROE=失策出塁: 単打と同じ進塁構造(§3・9/9フェーズ2)
             runs = 1 if r3 else 0
             if r2:
                 for pr, sc in ((A["a2h"], True), (1 - A["a2h"], False)):

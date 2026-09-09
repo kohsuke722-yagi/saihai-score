@@ -45,14 +45,18 @@ def classify(res: str):
         return "HBP"
     if "安打" in res or "ヒット" in res:
         return "1B"
+    if any(k in res for k in ("エラー", "失策", "打撃妨害", "走塁妨害")):
+        # 失策出塁ROE(§3・9/9フェーズ2): 「◯◯ゴロ（エラー）」等=打者は生きて出塁。
+        # 従来はゴロ/フライ判定が先に食いOUT_G/OUT_A扱い=出塁の系統的欠落(実得点比-12%の一因)
+        return "ROE"
     if "併殺" in res or "ダブルプレー" in res or "ゲッツー" in res:
         return "DP"
     if "ゴロ" in res:
         return "OUT_G"
     if any(k in res for k in ("フライ", "ライナー", "邪飛", "犠飛", "犠牲フライ")):
         return "OUT_A"
-    if any(k in res for k in ("失策", "エラー", "野選", "野手選択", "振り逃げ", "打撃妨害", "走塁妨害")):
-        return "OUT"
+    if "野選" in res or "野手選択" in res:
+        return "OUT"  # FC=走者封殺でアウトは記録される(打者出塁は state 変化として近似内)
     return "?"
 
 
