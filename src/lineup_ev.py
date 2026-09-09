@@ -99,9 +99,72 @@ def _bunt_branches(st, o, bp):
             (bp["leadout"], 0, LEADOUT[st], o + 1), (bp["fail"], 0, st, o + 1)]
 
 
-def _trans_table(dists, bunts=None):
+def load_extras():
+    """extras枝(9/9フェーズ2締め・受入±3%用): 盗塁(リーグ実測)+進塁打(凡打時の走者前進)。
+    暴投/捕逸はNPBプレー詳細に事象行が無く直接測定不能 — 隣接打席の状態遷移で測る
+    進塁パラメータ(adv_out_r1/r2等)に部分吸収されている(注記)。
+    既定OFF=采配採点・P4ゲート通貨(素DP)は不変。データ欠落時はNone"""
+    from stats2 import league_meta
+    from phase1 import LG_SB_ATT, LG_SB_SUCC
+    meta = league_meta()
+    p12 = (meta.get("adv_out_r1") or {}).get("p")
+    p23 = (meta.get("adv_out_r2") or {}).get("p")
+    if p12 is None or p23 is None:
+        return None
+    return {"sb": (LG_SB_ATT, LG_SB_SUCC), "p12": p12, "p23": p23}
+
+
+def _transitions_ex(st, o, d, extras):
+    """transitions()のOUT枝に進塁打を足した版。純粋状態(走者一塁のみ/二塁のみ)に限定適用
+    (複合状態のフォース分岐は匿名DPでは状態不変が近似的に正しいため据え置き・v1)"""
+    from phase1 import LEAGUE_DP
+    d2 = {k: v for k, v in d.items() if k != "OUT"}
+    br = list(transitions(st, o, d2))
+    p = d.get("OUT", 0.0)
+    if p <= 0:
+        return br
+    if st == "1" and o < 2:
+        pd = LEAGUE_DP
+        br.append((p * pd, 0, "", o + 2))
+        rest = p * (1 - pd)
+        br.append((rest * extras["p12"], 0, "2", o + 1))
+        br.append((rest * (1 - extras["p12"]), 0, "1", o + 1))
+    elif st == "2" and o < 2:
+        br.append((p * extras["p23"], 0, "3", o + 1))
+        br.append((p * (1 - extras["p23"]), 0, "2", o + 1))
+    else:
+        # その他の状態は従来のOUT枝(併殺・三塁走者生還込み)をそのまま使う
+        br += transitions(st, o, {"OUT": p})
+    return br
+
+
+def _steal_wrap(t, extras):
+    """前計算表に打席前の盗塁遷移(リーグ実測att/succ)を合成(一塁走者・二塁空き)"""
+    att, succ = extras["sb"]
+    if att <= 0:
+        return t
+    t2 = {}
+    for (st, o), br in t.items():
+        if "1" in st and "2" not in st:
+            st_s = st.replace("1", "2")
+            st_f = st.replace("1", "")
+            fail = ([(pr * att * (1 - succ), rn, ns, no)
+                     for pr, rn, ns, no in t[(st_f, o + 1)]] if o + 1 <= 2
+                    else [(att * (1 - succ), 0, st_f, 3)])
+            t2[(st, o)] = [(pr * att * succ, rn, ns, no)
+                           for pr, rn, ns, no in t[(st_s, o)]] + fail + \
+                          [(pr * (1 - att), rn, ns, no) for pr, rn, ns, no in br]
+        else:
+            t2[(st, o)] = br
+    return t2
+
+
+def _trans_table(dists, bunts=None, extras=None):
     """打者別×全(塁,アウト)の遷移リストを前計算。bunts=方策表
-    {(st,o): (bp, π)} — π=None:規範(純バント) / π=float:記述(π混合)"""
+    {(st,o): (bp, π)} — π=None:規範(純バント) / π=float:記述(π混合)。
+    extras=load_extras(): 盗塁・進塁打の実測枝(受入/表示用・既定OFF=ゲート通貨不変)"""
+    tr = (lambda s2, o2, d2: _transitions_ex(s2, o2, d2, extras)) if extras \
+        else transitions
     T = []
     for i, d in enumerate(dists):
         bo = bunts[i] if bunts else {}
@@ -110,7 +173,7 @@ def _trans_table(dists, bunts=None):
             for o in (0, 1, 2):
                 ent = bo.get((st, o))
                 if not ent:
-                    t[(st, o)] = transitions(st, o, d)
+                    t[(st, o)] = tr(st, o, d)
                     continue
                 bp, pi = ent
                 bb = _bunt_branches(st, o, bp)
@@ -119,7 +182,9 @@ def _trans_table(dists, bunts=None):
                 else:
                     t[(st, o)] = [(p * pi, r, ns, no) for p, r, ns, no in bb] + \
                                  [(p * (1 - pi), r, ns, no)
-                                  for p, r, ns, no in transitions(st, o, d)]
+                                  for p, r, ns, no in tr(st, o, d)]
+        if extras:
+            t = _steal_wrap(t, extras)
         T.append(t)
     return T
 
@@ -148,9 +213,9 @@ def _inning(T, lead):
     return runs, dict(nxt)
 
 
-def game_ev(dists, bunts=None):
+def game_ev(dists, bunts=None, extras=None):
     """この並びの期待得点(9イニング・先頭打者の持ち越し込み)"""
-    T = _trans_table(dists, bunts)
+    T = _trans_table(dists, bunts, extras)
     inn = [_inning(T, i) for i in range(9)]
     lead = {0: 1.0}
     total = 0.0
@@ -317,7 +382,7 @@ def speed_params(tm, players):
     return out
 
 
-def transitions_id(rid, outs, dist, sp):
+def transitions_id(rid, outs, dist, sp, extras=None):
     """走者ID付き遷移(設計P3のスロット占有DP): rid=(r1,r2,r3)=スロットidx or None。
     進塁確率・併殺回避を塁上の走者本人の実測値で評価。分岐構造はphase1.transitions()と同一"""
     from phase1 import (ADV_1B_R2SCORE, ADV_1B_R1TO3, ADV_2B_R1SCORE,
@@ -353,7 +418,16 @@ def transitions_id(rid, outs, dist, sp):
                 dp_runs = 1 if (r3 is not None and outs + 2 < 3) else 0
                 term(p * p_dp, dp_runs, None, None, r2, outs + 2)
                 pp = p * (1 - p_dp)
-            if r3 is not None and outs < 2:
+            if extras and outs < 2 and r3 is None and r1 is not None \
+                    and r2 is None:
+                # 進塁打(extras・9/9): 一塁走者のみ→二進(実測p12)。走者の身元は保持
+                term(pp * extras["p12"], 0, None, r1, None, outs + 1)
+                term(pp * (1 - extras["p12"]), 0, r1, None, None, outs + 1)
+            elif extras and outs < 2 and r3 is None and r1 is None \
+                    and r2 is not None:
+                term(pp * extras["p23"], 0, None, None, r2, outs + 1)
+                term(pp * (1 - extras["p23"]), 0, None, r2, None, outs + 1)
+            elif r3 is not None and outs < 2:
                 term(pp * ao3, 1, r1, r2, None, outs + 1)
                 term(pp * (1 - ao3), 0, r1, r2, r3, outs + 1)
             else:
@@ -440,7 +514,7 @@ def load_blend(fixed):
     return {"W": W, "d_ph": d_ph}
 
 
-def game_ev_speed(dists, sp, order, bunts=None, blend=None):
+def game_ev_speed(dists, sp, order, bunts=None, blend=None, extras=None):
     """走力込みの精密EV(2段階探索の決勝用): 走者の身元を追跡し盗塁も遷移として挿入。
     blend=load_blend(): 実測「スタメン以外が立つ率」で代打プール遷移を混合(表示EV用・
     探索/ゲート通貨は素DPのまま=9/9実務近似②を維持)"""
@@ -485,7 +559,7 @@ def game_ev_speed(dists, sp, order, bunts=None, blend=None):
                               ("3" if rid0[2] is not None else "")
                         ent = b9[b].get((stc, o0))
                     if not ent:
-                        trans = transitions_id(rid0, o0, d9[b], s9)
+                        trans = transitions_id(rid0, o0, d9[b], s9, extras)
                     else:
                         bp_pol, pi = ent
                         bb = _bunt_branches_id(rid0, o0, bp_pol, b)
@@ -494,7 +568,7 @@ def game_ev_speed(dists, sp, order, bunts=None, blend=None):
                         else:
                             trans = [(p * pi, r, ns, no) for p, r, ns, no in bb] + \
                                     [(p * (1 - pi), r, ns, no) for p, r, ns, no
-                                     in transitions_id(rid0, o0, d9[b], s9)]
+                                     in transitions_id(rid0, o0, d9[b], s9, extras)]
                     w = wrow[b] if wrow else 0.0
                     if w > 0.004:
                         # スタメン遷移(1-w)+代打プール遷移(w)。代打はバントしない前提
@@ -502,7 +576,7 @@ def game_ev_speed(dists, sp, order, bunts=None, blend=None):
                         trans = [(pr * (1 - w), rn, nr, no)
                                  for pr, rn, nr, no in trans] + \
                                 [(pr * w, rn, nr, no) for pr, rn, nr, no
-                                 in transitions_id(rid0, o0, d_ph, s9)]
+                                 in transitions_id(rid0, o0, d_ph, s9, extras)]
                     for pr, rn, nr, no in trans:
                         q = p0 * pr
                         runs += q * rn
@@ -648,12 +722,15 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=None):
         nms = [p["name"] for p in players]
         b_desc = bunt_options_desc(tm, nms, dists, pf)
         b_norm = bunt_options(tm, nms, dists, pf)
-        # 終盤の交代文化ブレンド(§4・9/9フェーズ2): 表示EVのみ・探索/ゲートは素DP
+        # 終盤の交代文化ブレンド(§4)+盗塁・進塁打extras(9/9フェーズ2締め):
+        # 表示EVのみ・探索/ゲートは素DP(実務近似②を維持)
         blend = load_blend(fixed)
+        extras = load_extras()
         ev_act_plain = game_ev(dists, b_desc)
-        ev_act = game_ev_speed(dists, sp, list(range(9)), b_desc, blend=blend)
+        ev_act = game_ev_speed(dists, sp, list(range(9)), b_desc, blend=blend,
+                               extras=extras)
         best, ev_best_plain = optimize(dists, fixed=fixed, bunts=b_norm)
-        ev_best = game_ev_speed(dists, sp, best, b_norm, blend=blend)
+        ev_best = game_ev_speed(dists, sp, best, b_norm, blend=blend, extras=extras)
         if ev_best < ev_act:  # 通貨差で最適が逆転する稀ケース: 実際の並びが最適
             best, ev_best = list(range(9)), ev_act
         # ベンチ注記: スタメン野手最弱よりsolo EVが高いベンチ野手(上位1名)
@@ -799,8 +876,8 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=None):
             b_norm_bm = bunt_options(tm, nms_bm, cur_d, pf)
             o_bm, _ = optimize(cur_d, fixed=fixed, restarts=1, bunts=b_norm_bm)
             sp_bm = speed_params(tc, [{"name": n} for n in nms_bm])
-            ev_bm = max(game_ev_speed(cur_d, sp_bm, o_bm, b_norm_bm, blend=blend),
-                        ev_best)
+            ev_bm = max(game_ev_speed(cur_d, sp_bm, o_bm, b_norm_bm, blend=blend,
+                                      extras=extras), ev_best)
         # ベンチ最強打者がどの守備位置にも適格でない=代打専任(丸型)の判定 → カードで役割として尊重
         pinch_ace = None
         if bench_best:

@@ -81,6 +81,9 @@ def build():
          "adv_1b_r1to3": [0, 0],   # 1Bで一塁走者が三塁へ(r1のみ状況)
          "adv_2b_r1": [0, 0],      # 2Bで一塁走者が生還(r1のみ状況)
          "adv_out_r3": [0, 0],     # 外野系アウトで三塁走者生還(2死未満)
+         "wp_pb": [0, 0],          # 暴投/捕逸/ボーク事象行(NPB詳細に無い=0が正常・注記用)
+         "adv_out_r2": [0, 0],     # 凡打(非併殺・r2単独)で二塁走者三進=進塁打(extras・9/9)
+         "adv_out_r1": [0, 0],     # 凡打(非併殺・r1単独)で一塁走者二進(extras・9/9)
          "dp_given_out": [0, 0],   # 併殺機会(r1・2死未満・インプレーアウト)中の併殺
          "gb_share": [0, 0]}       # インプレーアウト中のゴロ率
     n_games = 0
@@ -163,6 +166,31 @@ def build():
                     if pas[i + 1]["inning"] == pa["inning"] and pas[i + 1]["half"] == pa["half"]:
                         M["adv_1b_r1to3"][0] += 1 if "3" in nst else 0
                         M["adv_1b_r1to3"][1] += 1
+            # ── extras実測(9/9フェーズ2締め): 暴投/捕逸率と進塁打率 ──
+            _NB = ("盗塁", "牽制", "暴投", "ワイルドピッチ", "ボーク", "パスボール", "途中")
+            for e2 in pas:
+                r2 = e2.get("result", "")
+                if "振り逃げ" not in r2 and any(
+                        k in r2 for k in ("暴投", "ワイルドピッチ", "パスボール", "ボーク")):
+                    M["wp_pb"][0] += 1
+            bat_rows = [e2 for e2 in pas if "振り逃げ" in e2.get("result", "") or (
+                e2.get("batter") and not e2["batter"].startswith("（")
+                and not any(k in e2.get("result", "") for k in _NB))]
+            M["wp_pb"][1] += sum(1 for e2 in bat_rows if e2["runners"])
+            for i2, pa2 in enumerate(bat_rows[:-1]):
+                nx = bat_rows[i2 + 1]
+                if nx["inning"] != pa2["inning"] or nx["half"] != pa2["half"]:
+                    continue
+                c2 = classify(pa2.get("result", ""))
+                if c2 in ("OUT_G", "OUT_A") and pa2["outs"] < 2:
+                    if pa2["runners"] == "2":
+                        M["adv_out_r2"][0] += 1 if "3" in nx["runners"] else 0
+                        M["adv_out_r2"][1] += 1
+                    elif pa2["runners"] == "1":
+                        # 一塁走者の二進(次状態が2単独=進塁。1のまま=非進塁。
+                        # 打者一塁残留のフォース系は1のままに含まれ進塁扱いにならない=保守側)
+                        M["adv_out_r1"][0] += 1 if nx["runners"] == "2" else 0
+                        M["adv_out_r1"][1] += 1
     os.makedirs(LOGS, exist_ok=True)
     json.dump(batters, open(os.path.join(LOGS, "batters.json"), "w", encoding="utf-8"), ensure_ascii=False)
     json.dump(pitchers, open(os.path.join(LOGS, "pitchers.json"), "w", encoding="utf-8"), ensure_ascii=False)

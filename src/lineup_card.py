@@ -201,7 +201,8 @@ def build_from_results(res, mmdd, gid, png=False):
                "残りイニングはリーグ平均ブルペン想定)。" if all(r.get("matchup") for r in res) else
                "得点期待値=9イニング・中立環境換算(相手投手の質は含みません)。")
     if all(r.get("blend") for r in res):
-        ev_note += "終盤の交代文化込み(スタメン以外が打席に立つ確率をイニング×打順で実測しブレンド)。"
+        ev_note += ("終盤の交代文化込み(スタメン以外が打席に立つ確率をイニング×打順で実測しブレンド)・"
+                    "盗塁と進塁打も実測値で反映。")
     html = f'''<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   body {{ width:1080px; height:1250px; color:#1c2340; overflow:hidden; position:relative;

@@ -137,31 +137,33 @@ def check_fresh(snap):
 
 
 def check_accept(snap):
-    """受入: リーグクローン9回換算EV vs 実得点平均(打順設計9-1)。
-    既知のROE未実装乖離(約-1割)は急変時のみ警告(フェーズ2で±3%ゲートに昇格)"""
-    from lineup_ev import game_ev
+    """受入(打順設計9-1・9/9フェーズ2で±3%ゲートに昇格): リーグクローン9回換算EV
+    (盗塁・進塁打extras込み)vs 実得点平均。実側はビジター攻撃・9回以内に限定
+    (ホームは9回裏なし/サヨナラ検閲で下方バイアス=較正曲線と同じ理屈)"""
+    from lineup_ev import game_ev, load_extras
     meta = load_json(os.path.join(BASE, "data", "logs", "meta.json"), {})
     d = meta.get("league_dist")
     if not d:
         return "🟥 受入: league_dist無し(meta.json)", True
-    ev = game_ev([dict(d)] * 9)
+    ev = game_ev([dict(d)] * 9, extras=load_extras())
     runs = games = 0
     for f in glob.glob(os.path.join(BASE, "data", "events", "*", "*.json")):
         g = load_json(f)
         if not g or not g.get("events"):
             continue
         games += 1
-        runs += sum(int(e.get("runs", 0)) for e in g["events"] if e.get("type") == "pa")
+        runs += sum(int(e.get("runs", 0)) for e in g["events"]
+                    if e.get("type") == "pa" and e.get("half") == "表"
+                    and int(e.get("inning", 1)) <= 9)
     if not games:
         return "🟥 受入: イベント無し", True
-    actual = runs / (2 * games)
+    actual = runs / games
     dev = (ev - actual) / actual * 100
     prev = snap.get("accept_dev")
     snap["accept_dev"] = round(dev, 2)
-    bad = prev is not None and abs(dev - prev) > 2.0
-    tag = "急変!" if bad else ("既知乖離・ROEフェーズ2" if dev < -3 else "±3%内")
+    bad = abs(dev) > 3.0 or (prev is not None and abs(dev - prev) > 2.0)
     return (f"{'🟥' if bad else '✅'} 受入: クローンEV{ev:.2f} vs 実{actual:.2f}点 "
-            f"({dev:+.1f}%・{tag})"), bad
+            f"({dev:+.1f}%・{'±3%外!' if abs(dev) > 3.0 else '±3%内'})"), bad
 
 
 def check_gates(mmdd):
