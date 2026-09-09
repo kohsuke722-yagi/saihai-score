@@ -1,4 +1,5 @@
-# 深夜のDB更新便(04:00 JST): 前日rawを取得→イベントキャッシュ化→全DB再構築→commit
+# 深夜のDB更新便(04:00 JST): 前日rawを取得→イベントキャッシュ化→全DB再構築→
+# 自己検診日報→P4ゲート夜間バッチ→commit(9/9フェーズ1で日報+ゲートを追加)
 # rawのHTMLはリポに入れない(派生データのみ)。カード生成には影響しない独立便
 name: nightly-db
 on:
@@ -16,7 +17,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 330   # P4ゲート本走(7.2分/チーム×12級)を含むため延長
     steps:
       - uses: actions/checkout@v4
       - name: 対象日の決定
@@ -42,11 +43,25 @@ jobs:
           python3 src/defense_log.py
       - name: 選手キャッシュ鮮度(前日出場の古い/空キャッシュを再取得・9/7監査#6)
         run: python3 src/refresh_players.py
-      - name: commit(events+logs+players)
+      - name: 自己検診日報(design-ops 1節・Discordへ1メッセージ)
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: python3 src/health_report.py $MMDD
+      - name: 中間commit(events+logs+players を先に確定・ゲート長時間化のガード)
         run: |
           git config user.name "saihai-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data/events data/logs data/players
           git commit -m "nightly-db: $MMDD" || echo "no changes"
+          git pull --rebase
+          git push
+      - name: numpy(P4ゲート行列DP用)
+        run: pip install -q numpy
+      - name: P4ゲート夜間バッチ(前日全試合の三値判定を本走設定で確定)
+        run: python3 src/gate_batch.py $MMDD
+      - name: commit(gates)
+        run: |
+          git add data/gates
+          git commit -m "gates: $MMDD" || echo "no changes"
           git pull --rebase
           git push

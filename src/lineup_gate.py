@@ -8,7 +8,10 @@
   p値で有罪判定(p≤0.05)。FP≤5%は構成上保証・検出力は実測公開
 - 三値判定: 有意な見逃し(p≤0.05)/最適域(補正後点推定≥-0.02)/判定不能
 - 偽陽性テスト--fp: 三重ブートストラップで較正済み手続き自体のFPを検証(重い・夜間用)
-Usage: python src/lineup_gate.py 0905 c-g-19 [--b 400] [--k 200] [--mnull 40]
+- 運用(9/9フェーズ1): 判定JSONは data/gates/{mmdd}/ へ(コミット対象・カードが読む)。
+  --pregame=試合前モード(rawのbox/rosterから読む・軽量設定でカード配達前に実行)、
+  省略=夜間本走({gid}_final.json・本走設定B400/MN40)
+Usage: python src/lineup_gate.py 0905 c-g-19 [--b 400] [--k 200] [--mnull 40] [--pregame]
        python src/lineup_gate.py 0905 c-g-19 --fp [--m 20] [--mnull 20] [--b 200]
 """
 import json
@@ -152,6 +155,95 @@ def load_atoms(mmdd, gid):
     return out
 
 
+def load_atoms_pregame(mmdd, gid):
+    """試合前用ローダー: イベント(playbyplay)が無くてもbox/rosterから読む。
+    pid解決・投手判定はpregame_card.build_gameと同一手順(カードとの通貨統一)。
+    分布はゲート通貨=素DP(相手先発補正なし・9/9実務近似②の根拠のまま)"""
+    from pregame_card import roster_ids, resolve_pid_fallback, CODE2NAME
+    from runners import parse_box_lineup
+    from stats import fetch_player
+    from stats2 import batter_dist2
+    from phase1 import is_pitcher_bat, TEAM_NAME2CODE, _norm_name
+    lu = parse_box_lineup(mmdd, gid)
+    if not lu or len(lu) < 2:
+        raise RuntimeError("スタメン未発表")
+    home = CODE2NAME.get(gid.split("-")[0])
+    away = CODE2NAME.get(gid.split("-")[1])
+    if not home or not away:
+        raise RuntimeError(f"チームコード不明: {gid}")
+    rids = roster_ids(mmdd, gid)
+    out = []
+    for tm, l in ((away, lu[0]), (home, lu[1])):
+        tc = TEAM_NAME2CODE[tm]
+        names, dists, fixed, atoms9, fixed9 = [], [], None, [], []
+        for s0 in range(9):
+            role, nm = l.get(s0, ("", ""))
+            pid = (rids.get(tm) or {}).get(_norm_name(nm)) or resolve_pid_fallback(tc, nm)
+            if not pid:
+                raise RuntimeError(f"pid不明: {tm} {nm}")
+            P = fetch_player(pid)
+            if is_pitcher_bat(P) or "投" in (role or ""):
+                d, fixed = dict(PITCHER_BAT), s0
+                a, f = None, dict(PITCHER_BAT)
+            else:
+                d = batter_dist2(pid, P, mmdd)
+                a, f = batter_atoms(pid, P, mmdd)
+            names.append(nm)
+            dists.append(d)
+            atoms9.append(a)
+            fixed9.append(f)
+        out.append((tm, names, dists, fixed, atoms9, fixed9))
+    return out
+
+
+def gate_one(tm, dists, fixed, atoms9, fixed9, B, K, MN, rng, verbose=True):
+    """1チームの三値判定(帯内H0+optimism補正+帰無較正p値+δ拡幅=9/9最終形)"""
+    t0 = time.perf_counter()
+    o_best, _, top = fast_full_search(dists, fixed=fixed, topk=K)
+    band = [o for _, o in sorted(top, reverse=True)]
+    actual = list(range(9))
+    if actual not in band:
+        band.append(actual)
+    st = gate_stat(atoms9, fixed9, actual, band, B, rng)
+    # δ拡幅(9/9裁定#4): 帰無の帯資格は水増しされた首位から測るため、実測optimism分
+    # 広げて対称化(FP実測8%>5%の残滓対策)
+    dl = DELTA_BAND + abs(st["optimism"])
+    his = null_band_his(atoms9, fixed9, band, B, MN, rng, delta=dl)
+    v, p = verdict_of(st, his)
+    c5 = sorted(his)[int(0.05 * len(his))]
+    sec = time.perf_counter() - t0
+    if verbose:
+        print(f"── {tm} ({sec:.0f}s) 素diff {st['diff_hat']:+.3f} "
+              f"optimism {st['optimism']:+.3f} → 補正後 {st['point_corr']:+.3f} "
+              f"帯95% [{st['band95'][0]:+.3f}, {st['band95'][1]:+.3f}]", flush=True)
+        print(f"   帰無5%線 {c5:+.3f} (M_null={MN}) p={p} → 判定: {v}", flush=True)
+    return {**st, "team": tm, "p": p, "null_c5": round(c5, 4),
+            "verdict": v, "sec": round(sec)}
+
+
+def gates_path(mmdd, gid, final=False):
+    return os.path.join(BASE, "data", "gates", mmdd,
+                        f"{gid}{'_final' if final else ''}.json")
+
+
+def run_gate(mmdd, gid, B=400, K=200, MN=40, pregame=False, team=None):
+    """1試合の三値判定を実行し data/gates/{mmdd}/ へ保存。returns 結果list"""
+    rng = random.Random(20260909)
+    loader = load_atoms_pregame if pregame else load_atoms
+    results = [gate_one(tm, dists, fixed, atoms9, fixed9, B, K, MN, rng)
+               for tm, names, dists, fixed, atoms9, fixed9 in loader(mmdd, gid)
+               if not (team and tm != team)]
+    outp = gates_path(mmdd, gid, final=not pregame)
+    os.makedirs(os.path.dirname(outp), exist_ok=True)
+    payload = {"mmdd": mmdd, "gid": gid, "mode": "pregame" if pregame else "nightly",
+               "settings": {"B": B, "K": K, "M_null": MN,
+                            "delta": DELTA_BAND, "opt_zone": OPT_ZONE},
+               "teams": results}
+    json.dump(payload, open(outp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    print("saved:", outp)
+    return results
+
+
 def main():
     mmdd, gid = sys.argv[1], sys.argv[2]
     args = sys.argv[3:]
@@ -159,11 +251,15 @@ def main():
     def arg(k, dv):
         return int(args[args.index(k) + 1]) if k in args else dv
     fp_mode = "--fp" in args
+    pregame = "--pregame" in args
     B = arg("--b", 400)
     K = arg("--k", 200)
     M = arg("--m", 20)
     MN = arg("--mnull", 40 if not fp_mode else 20)
     tgt = args[args.index("--team") + 1] if "--team" in args else None
+    if not fp_mode:
+        run_gate(mmdd, gid, B=B, K=K, MN=MN, pregame=pregame, team=tgt)
+        return
     rng = random.Random(20260909)
     results = []
     for tm, names, dists, fixed, atoms9, fixed9 in load_atoms(mmdd, gid):
@@ -175,42 +271,26 @@ def main():
         actual = list(range(9))
         if actual not in band:
             band.append(actual)
-        if not fp_mode:
-            st = gate_stat(atoms9, fixed9, actual, band, B, rng)
-            # δ拡幅(9/9裁定#4): 帰無の帯資格は水増しされた首位から測るため、実測optimism分
-            # 広げて対称化(FP実測8%>5%の残滓対策)
+        # 偽陽性テスト(三重ブートストラップ): 完璧監督=o_best(真の最適)。
+        # 外側M個の観測データセットそれぞれに較正済み手続き(統計量+帰無較正)を適用
+        fp = 0
+        for m in range(M):
+            atoms_m = [resample(a, rng) if a else None for a in atoms9]
+            st = gate_stat(atoms_m, fixed9, o_best, band, B, rng)
             dl = DELTA_BAND + abs(st["optimism"])
-            his = null_band_his(atoms9, fixed9, band, B, MN, rng, delta=dl)
-            v, p = verdict_of(st, his)
-            c5 = sorted(his)[int(0.05 * len(his))]
-            sec = time.perf_counter() - t0
-            print(f"── {tm} ({sec:.0f}s) 素diff {st['diff_hat']:+.3f} "
-                  f"optimism {st['optimism']:+.3f} → 補正後 {st['point_corr']:+.3f} "
-                  f"帯95% [{st['band95'][0]:+.3f}, {st['band95'][1]:+.3f}]")
-            print(f"   帰無5%線 {c5:+.3f} (M_null={MN}) p={p} → 判定: {v}")
-            results.append({**st, "team": tm, "p": p, "null_c5": round(c5, 4),
-                            "verdict": v})
-        else:
-            # 偽陽性テスト(三重ブートストラップ): 完璧監督=o_best(真の最適)。
-            # 外側M個の観測データセットそれぞれに較正済み手続き(統計量+帰無較正)を適用
-            fp = 0
-            for m in range(M):
-                atoms_m = [resample(a, rng) if a else None for a in atoms9]
-                st = gate_stat(atoms_m, fixed9, o_best, band, B, rng)
-                dl = DELTA_BAND + abs(st["optimism"])
-                his = null_band_his(atoms_m, fixed9, band, B, MN, rng, delta=dl)
-                v, _p = verdict_of(st, his)
-                if v == "有意な見逃し":
-                    fp += 1
-                print(f"   {tm}: {m+1}/{M} 済 (FP {fp})")
-            rate = fp / M
-            sec = time.perf_counter() - t0
-            print(f"── {tm} 偽陽性率 {rate:.1%} ({fp}/{M}) "
-                  f"{'合格(≤5%)' if rate <= 0.05 else '不合格'} ({sec:.0f}s)")
-            results.append({"team": tm, "fp": fp, "M": M, "rate": rate})
+            his = null_band_his(atoms_m, fixed9, band, B, MN, rng, delta=dl)
+            v, _p = verdict_of(st, his)
+            if v == "有意な見逃し":
+                fp += 1
+            print(f"   {tm}: {m+1}/{M} 済 (FP {fp})")
+        rate = fp / M
+        sec = time.perf_counter() - t0
+        print(f"── {tm} 偽陽性率 {rate:.1%} ({fp}/{M}) "
+              f"{'合格(≤5%)' if rate <= 0.05 else '不合格'} ({sec:.0f}s)")
+        results.append({"team": tm, "fp": fp, "M": M, "rate": rate})
     outp = os.path.join(BASE, "data", "out", mmdd,
-                        f"gate_{'fp_' if fp_mode else ''}{gid}"
-                        f"{('_' + tgt) if tgt else ''}.json")
+                        f"gate_fp_{gid}{('_' + tgt) if tgt else ''}.json")
+    os.makedirs(os.path.dirname(outp), exist_ok=True)
     json.dump(results, open(outp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print("saved:", outp)
 

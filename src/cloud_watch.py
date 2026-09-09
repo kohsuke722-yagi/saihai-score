@@ -45,7 +45,7 @@ def commit_marker(mmdd, gid, note="posted"):
     g("config", "user.name", "saihai-bot")
     g("config", "user.email", "actions@users.noreply.github.com")
     for attempt in range(10):  # push競合をリトライで解決(9/8: 5回で突破できず二重配達→10回+長め退避)
-        g("add", "data/posted", "data/players")
+        g("add", "data/posted", "data/players", "data/gates")
         g("commit", "-m", f"{note}: {mmdd} {gid}")
         g("pull", "--rebase")
         r = g("push")

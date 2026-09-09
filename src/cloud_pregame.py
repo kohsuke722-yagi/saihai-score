@@ -35,7 +35,38 @@ def announced(mmdd, gid):
         len(d) == 9 and all(d.get(s, ("", ""))[1] for s in range(9)) for d in lu)
 
 
-def deliver(mmdd, gid):
+# P4ゲート試合前設定(9/9裁定A: 発表後ゲート→配達。FP検証と同水準の軽量設定)
+GATE_B = int(os.environ.get("GATE_B", "200"))
+GATE_MN = int(os.environ.get("GATE_MN", "20"))
+GATE_BUDGET_MIN = int(os.environ.get("GATE_BUDGET_MIN", "18"))  # 1試合の時間予算(分)
+
+
+def run_gate(mmdd, gid, deadline):
+    """三値判定を配達前に実行(data/gates/へ保存→カードが読む)。
+    締切までの残りが予算未満なら見送り=「検定中」バッジで即配達(誠実なフォールバック)"""
+    remain = (deadline - datetime.datetime.now(JST)).total_seconds() / 60
+    if remain < GATE_BUDGET_MIN + 4:
+        print(f"{gid}: 残り{remain:.0f}分<予算{GATE_BUDGET_MIN}分 → ゲート見送り(検定中表示)",
+              flush=True)
+        return False
+    print(f"{gid}: P4ゲート開始 (B={GATE_B}/MN={GATE_MN})", flush=True)
+    try:
+        r = subprocess.run(
+            [PY, os.path.join(SRC, "lineup_gate.py"), mmdd, gid, "--pregame",
+             "--b", str(GATE_B), "--mnull", str(GATE_MN)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=GATE_BUDGET_MIN * 60)
+        print((r.stdout or "")[-900:] or (r.stderr or "")[-500:], flush=True)
+        return r.returncode == 0
+    except subprocess.TimeoutExpired:
+        print(f"{gid}: ゲートtimeout({GATE_BUDGET_MIN}分) → 検定中表示で配達", flush=True)
+        return False
+    except Exception as e:
+        print(f"{gid}: ゲート失敗 {e} → 検定中表示で配達", flush=True)
+        return False
+
+
+def deliver(mmdd, gid, deadline=None):
     for page in ("roster.html", "index.html"):
         try:
             save(os.path.join(RAW, mmdd, gid, page),
@@ -43,6 +74,8 @@ def deliver(mmdd, gid):
         except Exception as e:
             print(f"{gid}: {page}取得失敗 {e}", flush=True)
         time.sleep(1.2)
+    if deadline is not None:
+        run_gate(mmdd, gid, deadline)
     r = subprocess.run([PY, os.path.join(SRC, "pregame_card.py"), mmdd, gid, "--png"],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     print((r.stdout or "")[-1200:] or (r.stderr or "")[-600:], flush=True)
@@ -92,7 +125,7 @@ def main():
             if announced(mmdd, gid):
                 print(f"{gid}: スタメン発表検知!", flush=True)
                 try:
-                    ok = deliver(mmdd, gid)
+                    ok = deliver(mmdd, gid, deadline)
                 except Exception as e:
                     print(f"{gid}: 配達エラー {e}(次周で再試行)", flush=True)
                     ok = False

@@ -164,8 +164,12 @@ def build_game(mmdd, gid, png=False):
              f" vs {h['team']} {h['ev_actual']:.2f}(9回換算・中立環境)"]
     for r in res:
         note = []
-        if r["diff"] <= -0.05:
-            note.append(f"並べ替え余地{-r['diff']:.2f}点")
+        # 並び差の言及はP4三値のみ(9/9フェーズ1: 固定閾値の断定を廃止)
+        g = r.get("gate") or {}
+        if g.get("verdict") == "有意な見逃し":
+            note.append("並べ替え余地あり(統計的に有意)")
+        elif g.get("verdict") == "最適域":
+            note.append("並びは最適域")
         if r.get("ev_bestmem") and r["ev_bestmem"] - r["ev_actual"] >= 0.1:
             note.append(f"ベストメンバーなら+{r['ev_bestmem'] - r['ev_actual']:.2f}点"
                         f"({'・'.join(r['bestmem_in'])} IN)")

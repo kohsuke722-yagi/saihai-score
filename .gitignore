@@ -2,6 +2,10 @@
 data/raw/
 data/out/
 data/raw_hold/
+data/raw2025/
+
+# 2025研究データ(事前分布用・フェーズ4)— 12.6MBの派生イベント。必要になった時点でコミット判断
+data/events2025/
 
 # 秘密情報(Discord Webhook等)
 .secrets/

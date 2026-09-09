@@ -7,6 +7,7 @@ import glob
 import json
 import math
 import os
+import random
 import sys
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,8 +41,9 @@ def collect(d0, d1):
             tm = r.get("def_team") if k in ("relief", "ibb") else r.get("team")
             if not tm:
                 continue
-            a = agg.setdefault(tm, {"atk": 0.0, "miss": 0.0, "games": set()})
-            a["games"].add(f"{mmdd}/{gid}")
+            gk = f"{mmdd}/{gid}"
+            a = agg.setdefault(tm, {"atk": 0.0, "miss": 0.0, "games": set(), "pg": {}})
+            a["games"].add(gk)
             if r.get("decision") is not None:
                 if k == "swing" and not r.get("counted"):
                     continue
@@ -49,6 +51,7 @@ def collect(d0, d1):
                 if w is None:
                     continue
                 a["atk"] += w * 100
+                a["pg"][gk] = a["pg"].get(gk, 0.0) + w * 100
                 n_all += 1
                 if w >= 0:
                     n_pos += 1
@@ -61,8 +64,10 @@ def collect(d0, d1):
                     worst = (w * 100, lab, r)
             elif r.get("decision_head_wp") is not None:
                 a["miss"] += r["decision_head_wp"] * 100
+                a["pg"][gk] = a["pg"].get(gk, 0.0) + r["decision_head_wp"] * 100
             elif r.get("engine_loss_wp"):
                 a["miss"] -= r["engine_loss_wp"] * 100
+                a["pg"][gk] = a["pg"].get(gk, 0.0) - r["engine_loss_wp"] * 100
     return agg, best, worst, (n_pos, n_neg, n_all)
 
 
@@ -113,41 +118,84 @@ def medal(tm, size=54, fs=19):
             f'box-shadow:0 0 14px {col}55, inset 0 0 8px {col}22">{mono}</div>')
 
 
-def rank_rows(agg, teams):
+B_BOOT = 2000  # 週間誤差帯のブートストラップ本数(試合単位ブロック=試合間相関を跨がない)
+
+
+def rank_rows(agg, teams, rng):
+    """週間ランキング行+95%誤差帯(design-weekly 1節・9/9フェーズ1)。
+    帯=試合を単位に再抽選(1試合内の采配は同一監督・同一展開で相関するため試合ブロック)。
+    rows: dict(tm, net, atk, miss, g, ci=(lo,hi)|None, boots=平均の再抽選列|None)"""
     rows = []
     for tm in teams:
         a = agg.get(tm)
         if not a or not a["games"]:
             continue
         g = len(a["games"])
-        rows.append((tm, (a["atk"] + a["miss"]) / g, a["atk"] / g, a["miss"] / g, g))
-    rows.sort(key=lambda x: -x[1])
+        vals = [a["pg"].get(k, 0.0) for k in sorted(a["games"])]
+        boots = ci = None
+        if g >= 2:
+            boots = []
+            for _ in range(B_BOOT):
+                boots.append(sum(rng.choice(vals) for _ in range(g)) / g)
+            s = sorted(boots)
+            ci = (s[int(0.025 * B_BOOT)], s[min(B_BOOT - 1, int(0.975 * B_BOOT))])
+        rows.append({"tm": tm, "net": (a["atk"] + a["miss"]) / g, "atk": a["atk"] / g,
+                     "miss": a["miss"] / g, "g": g, "ci": ci, "boots": boots})
+    rows.sort(key=lambda x: -x["net"])
     return rows
+
+
+def is_tied(r1, r2):
+    """2チームの週間値の差が誤差帯内か(独立ブートストラップの差分95%帯が0を跨ぐ)。
+    試合数不足(帯が引けない)側があれば断定しない=差なし扱い"""
+    if not r1 or not r2:
+        return True
+    if not r1["boots"] or not r2["boots"]:
+        return True
+    d = sorted(b1 - b2 for b1, b2 in zip(r1["boots"], r2["boots"]))
+    lo, hi = d[int(0.025 * len(d))], d[min(len(d) - 1, int(0.975 * len(d)))]
+    return lo <= 0 <= hi
 
 
 RANK_BG = ("linear-gradient(135deg,#f7d774,#e0a90f)", "linear-gradient(135deg,#e8edf5,#b9c4d8)",
            "linear-gradient(135deg,#e8c39a,#c08552)")
 
 
-def bar_rows(rows, mx):
+def bar_rows(rows, mx, ties):
+    """ties[i]=True は上の行との差が誤差帯内=順位を断定しない(=印・design-weekly 1節)"""
+    def x_of(v):
+        return 50 + max(-50.0, min(50.0, v / mx * 50))
     out = []
-    for i, (tm, net, atk, miss, g) in enumerate(rows):
+    for i, r in enumerate(rows):
+        tm, net, atk, miss, g, ci = r["tm"], r["net"], r["atk"], r["miss"], r["g"], r["ci"]
         t = TEAMS.get(tm, {})
         col = t.get("color", "#888")
         w = min(100.0, abs(net) / mx * 100)
         cls = "pos" if net >= 0 else "neg"
         side = "left:50%" if net >= 0 else "right:50%"
-        rbg = RANK_BG[i] if i < 3 else "#f0f3f9"
-        rcol = "#fff" if i < 3 else "#9fadcc"
-        first = ' style="background:rgba(47,111,224,.05);border-radius:12px"' if i == 0 else ""
+        tied = i > 0 and ties[i]
+        if tied:
+            rk = '<div class="rk" style="background:#eef1f7;color:#9fadcc">=</div>'
+        else:
+            rbg = RANK_BG[i] if i < 3 else "#f0f3f9"
+            rcol = "#fff" if i < 3 else "#9fadcc"
+            rk = f'<div class="rk" style="background:{rbg};color:{rcol}">{i + 1}</div>'
+        whisk = ""
+        if ci:
+            lo, hi = x_of(ci[0]), x_of(ci[1])
+            whisk = (f'<div class="whisk" style="left:{lo:.1f}%;'
+                     f'width:{max(0.6, hi - lo):.1f}%"></div>')
+        pm = f"±{(ci[1] - ci[0]) / 2:.1f}" if ci else "±—"
+        first = ' style="background:rgba(47,111,224,.05);border-radius:12px"' \
+            if i == 0 and not ties[min(1, len(rows) - 1)] else ""
         out.append(f'''
       <div class="rrow"{first}>
-        <div class="rk" style="background:{rbg};color:{rcol}">{i + 1}</div>
+        {rk}
         {medal(tm, 40, 14)}
         <div class="tmw"><div class="tm" style="color:{col}">{tm}</div>
           <div class="sub">攻め<b class="{ 'sg' if atk>=0 else 'sr'}">{atk:+.1f}</b> 見逃し<b class="sr">{miss:+.1f}</b><span class="gg"> / {g}試合</span></div></div>
-        <div class="barwrap"><div class="bar {cls}" style="width:{w / 2:.1f}%;{side}"></div></div>
-        <div class="val {cls}">{net:+.1f}<span class="pct">%</span></div>
+        <div class="barwrap"><div class="bar {cls}" style="width:{w / 2:.1f}%;{side}"></div>{whisk}</div>
+        <div class="val {cls}">{net:+.1f}<span class="pct">%</span><div class="pmv">{pm}</div></div>
       </div>''')
     return "".join(out)
 
@@ -167,11 +215,21 @@ def hero_card(title, tm, val, sub, good=True):
 
 def build(d0, d1, png=False):
     agg, best, worst, (n_pos, n_neg, n_all) = collect(d0, d1)
-    ce, pa = rank_rows(agg, CENTRAL), rank_rows(agg, PACIFIC)
-    mx = max([abs(r[1]) for r in ce + pa] or [1.0])
+    if not agg or n_all == 0:
+        print("採点対象の試合なし(雨天等)→ カード生成なし")
+        return None
+    rng = random.Random(20260909)
+    ce, pa = rank_rows(agg, CENTRAL, rng), rank_rows(agg, PACIFIC, rng)
+    ties_ce = [i > 0 and is_tied(ce[i - 1], ce[i]) for i in range(len(ce))]
+    ties_pa = [i > 0 and is_tied(pa[i - 1], pa[i]) for i in range(len(pa))]
+    mx = max([abs(r["net"]) for r in ce + pa] +
+             [abs(c) for r in ce + pa if r["ci"] for c in r["ci"]] or [1.0])
     period = f"{int(d0[:2])}/{int(d0[2:])}（火）− {int(d1[:2])}/{int(d1[2:])}（日）"
-    king = max(ce + pa, key=lambda r: r[1])
-    dunce = min(ce + pa, key=lambda r: r[1])
+    ranked = sorted(ce + pa, key=lambda r: -r["net"])
+    king, dunce = ranked[0], ranked[-1]
+    # 差なし判定(design-weekly 1節): 帯がランキング差を超える週は王座・ワーストを断定しない
+    king_tied = len(ranked) > 1 and is_tied(king, ranked[1])
+    dunce_tied = len(ranked) > 1 and is_tied(ranked[-2], dunce)
     C = 2 * math.pi * 74
     fpos = n_pos / max(1, n_pos + n_neg)
     glen = max(4, C * fpos - 6)
@@ -261,10 +319,13 @@ def build(d0, d1, png=False):
   .bar {{ position:absolute; top:2.5px; bottom:2.5px; border-radius:6px; }}
   .bar.pos {{ background:linear-gradient(90deg,#0d9e55,#35c97e); box-shadow:0 0 12px rgba(13,158,85,.55); }}
   .bar.neg {{ background:linear-gradient(90deg,#f0837d,#dd3d35); box-shadow:0 0 12px rgba(221,61,53,.5); }}
-  .val {{ width:88px; flex:none; text-align:right; font-size:21px; font-weight:900; }}
+  .val {{ width:88px; flex:none; text-align:right; font-size:21px; font-weight:900; line-height:1.05; }}
   .val .pct {{ font-size:13px; }}
   .val.pos {{ color:#0d9e55; text-shadow:0 0 12px rgba(13,158,85,.45); }}
   .val.neg {{ color:#dd3d35; text-shadow:0 0 12px rgba(221,61,53,.4); }}
+  .pmv {{ font-size:10.5px; font-weight:800; color:#9fadcc; text-shadow:none; }}
+  .whisk {{ position:absolute; top:50%; height:3px; transform:translateY(-50%);
+           background:rgba(22,33,60,.38); border-radius:2px; pointer-events:none; }}
   .band {{ display:flex; gap:20px; margin-top:16px; }}
   .bcard {{ flex:1; background:rgba(255,255,255,.94); border-radius:20px; padding:16px 20px;
            box-shadow:0 10px 28px rgba(22,33,60,.09); position:relative; overflow:hidden; }}
@@ -293,7 +354,10 @@ def build(d0, d1, png=False):
     <div class="chip"><div class="period">{period}</div><br><span class="beta">β 試験運用</span></div>
   </div>
   <div class="heroband">
-    {hero_card("👑 今週の采配王", king[0], f"{king[1]:+.1f}%", f"攻め{king[2]:+.1f} / 見逃し{king[3]:+.1f}(勝率換算・週平均)", True)}
+    {hero_card("👑 今週の首位(差なし)" if king_tied else "👑 今週の采配王", king["tm"],
+               f"{king['net']:+.1f}%",
+               (f"※{ranked[1]['tm']}との差は誤差帯内=王座の断定なし。" if king_tied else "")
+               + f"攻め{king['atk']:+.1f} / 見逃し{king['miss']:+.1f}(勝率換算・週平均)", True)}
     <div class="ringbox">
       <div class="ringlbl">今週の全采配</div>
       <svg width="170" height="170" viewBox="0 0 170 170">
@@ -310,15 +374,19 @@ def build(d0, d1, png=False):
           <tspan fill="#0d9e55">好手{fpos:.0%}</tspan><tspan fill="#9fadcc"> / </tspan><tspan fill="#dd3d35">悪手{1 - fpos:.0%}</tspan></text>
       </svg>
     </div>
-    {hero_card("⚠ 今週のワースト", dunce[0], f"{dunce[1]:+.1f}%", f"攻め{dunce[2]:+.1f} / 見逃し{dunce[3]:+.1f}(勝率換算・週平均)", False)}
+    {hero_card("⚠ 最下位圏(差なし)" if dunce_tied else "⚠ 今週のワースト", dunce["tm"],
+               f"{dunce['net']:+.1f}%",
+               (f"※{ranked[-2]['tm']}との差は誤差帯内=断定なし。" if dunce_tied else "")
+               + f"攻め{dunce['atk']:+.1f} / 見逃し{dunce['miss']:+.1f}(勝率換算・週平均)", False)}
   </div>
   <div class="cols">
-    <div class="col"><div class="lg"><span class="dot"></span>セ・リーグ</div>{bar_rows(ce, mx)}</div>
-    <div class="col"><div class="lg"><span class="dot" style="background:#f5c518;box-shadow:0 0 10px rgba(245,197,24,.7)"></span>パ・リーグ</div>{bar_rows(pa, mx)}</div>
+    <div class="col"><div class="lg"><span class="dot"></span>セ・リーグ</div>{bar_rows(ce, mx, ties_ce)}</div>
+    <div class="col"><div class="lg"><span class="dot" style="background:#f5c518;box-shadow:0 0 10px rgba(245,197,24,.7)"></span>パ・リーグ</div>{bar_rows(pa, mx, ties_pa)}</div>
   </div>
   <div class="band">{bw_card(best, "b")}{bw_card(worst, "w")}</div>
-  <div class="note">数値=勝率換算の采配収支(%/試合・週平均)。攻め=実行した采配の合計/見逃し=最善を選ばなかった機会損失。
-  指示の瞬間の期待値で採点し結果は使いません。負傷交代・選択肢のない場面は採点対象外。僅差の順位差は誤差の範囲です。</div>
+  <div class="note">数値=勝率換算の采配収支(%/試合・週平均)。攻め=実行した采配の合計/見逃し=最善を選ばなかった機会損失
+  (現状は代打の見逃しが中心・対象は順次拡大)。指示の瞬間の期待値で採点し結果は使いません。負傷交代・選択肢のない場面は採点対象外。
+  ±=週間値の95%誤差帯(試合単位の再抽選で推定)。「=」印は上位チームとの差が誤差帯内=順位を断定しない(差なし)。</div>
   <div class="foot">@saihaiscore_lab(β試験運用)| 計算方法はnoteで全公開 | データ: NPB公式記録より自動集計</div>
 </div>
 </body></html>'''

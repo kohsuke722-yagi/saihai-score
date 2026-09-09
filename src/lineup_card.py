@@ -60,14 +60,24 @@ def pos_of(role):
     return ""
 
 
+def badge_of(r):
+    """判定バッジ=P4統計ゲートの三値のみ(9/9フェーズ1配線)。
+    v0固定閾値の「ほぼ最適」断定は廃止 — ゲート未実施なら断定しない(検定中)"""
+    g = r.get("gate") or {}
+    v = g.get("verdict")
+    if v == "最適域":
+        return '<span class="badge ok">✔ 最適域の並び</span>'
+    if v == "有意な見逃し":
+        return '<span class="badge amber">⚠ 並び替え余地(統計的に有意)</span>'
+    if v == "判定不能":
+        return '<span class="badge gray">並び差は判定不能(僅差)</span>'
+    return '<span class="badge gray">⏳ 並び判定は検定中</span>'
+
+
 def team_panel(r, side):
     t = TEAMS.get(r["team"], {})
     col, glow = t.get("color", "#333"), t.get("glow", "60,60,60")
-    diff = r["diff"]
-    if diff >= -0.05:
-        badge = '<span class="badge ok">✔ ほぼ最適の並び</span>'
-    else:
-        badge = f'<span class="badge amber">並び替え余地 {diff:+.2f}点</span>'
+    badge = badge_of(r)
     field = [p for p in r["players"] if "投" not in p["role"]]
     mx_solo = max(p["solo"] for p in field) or 1
     star_pid = max(field, key=lambda p: p["solo"])["pid"]
@@ -159,8 +169,27 @@ def build(mmdd, gid, png=False):
     build_from_results(res, mmdd, gid, png)
 
 
+def load_gate(mmdd, gid):
+    """P4ゲート判定JSON: 試合前版({gid}.json=配達時の判定)を優先し、
+    無ければ夜間本走版({gid}_final.json)。どちらも無ければ{}"""
+    import json
+    gdir = os.path.join(BASE, "data", "gates", mmdd)
+    for fn in (f"{gid}.json", f"{gid}_final.json"):
+        p = os.path.join(gdir, fn)
+        if os.path.exists(p):
+            try:
+                d = json.load(open(p, encoding="utf-8"))
+                return {t["team"]: t for t in d.get("teams", [])}
+            except Exception:
+                pass
+    return {}
+
+
 def build_from_results(res, mmdd, gid, png=False):
     """結果dict列(先攻,後攻)からカード生成(試合前カード9/8対応で分離)"""
+    gate = load_gate(mmdd, gid)
+    for r in res:
+        r.setdefault("gate", gate.get(r["team"]))
     try:
         meta = parse_meta(mmdd, gid)
         date, venue = meta["date"], meta["venue"]
@@ -231,6 +260,7 @@ def build_from_results(res, mmdd, gid, png=False):
            padding:3px 11px; z-index:1; }}
   .badge.ok {{ background:#fff; color:#0d9e55; }}
   .badge.amber {{ background:#fff; color:#c98a00; }}
+  .badge.gray {{ background:rgba(255,255,255,.82); color:#5f6f99; }}
   .phdr {{ display:flex; gap:8px; color:#5f6f99; font-size:10.5px; font-weight:900; letter-spacing:1px;
           border-bottom:2px solid #e3e9f5; padding-bottom:4px; margin-bottom:2px; }}
   .prow {{ display:flex; align-items:center; gap:8px; padding:3.5px 4px; border-radius:10px; }}
@@ -313,7 +343,8 @@ def build_from_results(res, mmdd, gid, png=False):
   <div class="note">{ev_note} 打力=その打者9人が並んだ場合の点/試合換算(素の実力・対戦補正なし)。
   ベストメンバーは同ポジション群内の入替+守備再配置の参考値で、守備力・休養・疲労は
   考慮していません(候補は減衰込み総合力と短期2週評価の両方で上回る場合のみ提案。▼▲=直近2週の実出塁との乖離)。
-  僅差は誤差の範囲です。計算方法はnoteで全公開。</div>
+  並びの判定バッジは統計検定(ブートストラップ・偽陽性率5%以下に較正済み)の三値表示
+  【最適域/判定不能/有意な並び替え余地】。僅差は誤差の範囲です。計算方法はnoteで全公開。</div>
   <div class="foot">@saihaiscore_lab(β試験運用)| 計算方法はnoteで全公開 | データ: NPB公式記録より自動集計</div>
 </div>
 </body></html>'''
