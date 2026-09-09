@@ -8,6 +8,7 @@ Usage: python src/pitcher_ctx.py
 """
 import datetime
 import json
+import math
 import os
 import sys
 
@@ -158,13 +159,22 @@ def main():
         r, n = pooled(rest_p, k)
         print(f"  {label}: 被出塁{r:.3f} (n={n}) 乗数{m:.3f}")
     out["load"] = {"base": 1.0}
-    print("負荷2軸(リリーフ・同一投手内MH・基準=短期長期とも低):")
+    # 2季混合較正(9/9フェーズ3・2025検証の宿題): 2025年実測(research_2025)を固定事前として
+    # log-ORをn加重ブレンド。長期軸は2025がn=138+暦30日定義で非互換のため混合しない
+    # (OR0.846<1は生存バイアス・decisions-0907)
+    PRIOR_2025 = {"burst": (1.020, 5577), "both": (1.288, 482)}
+    print("負荷2軸(リリーフ・同一投手内MH・基準=短期長期とも低・burst/bothは2季混合):")
     for k, label in (("base", "基準"), ("burst", "短期高(5日2登板+)"),
                      ("heavy", "長期高(30試合12登板+)"), ("both", "両方高")):
         m, nb = (1.0, pooled(load_p, k)[1]) if k == "base" else mh_or(load_p, k, "base")
-        out["load"][k] = round(m, 4)
         r, n = pooled(load_p, k)
-        print(f"  {label}: 被出塁{r:.3f} (n={n}) 乗数{m:.3f}")
+        if k in PRIOR_2025 and m > 0 and n:
+            or25, n25 = PRIOR_2025[k]
+            m = math.exp((n * math.log(max(1e-6, m)) + n25 * math.log(or25))
+                         / (n + n25))
+        out["load"][k] = round(m, 4)
+        print(f"  {label}: 被出塁{r:.3f} (n={n}) 乗数{m:.3f}"
+              + ("(2季混合)" if k in PRIOR_2025 else ""))
     # ── 翌日可用性(リリーフ): 今日投げると明日(翌チーム試合日が連日の場合)投げる確率がどれだけ落ちるか
     # +リーグ平均リリーフ被打分布(起用価値の基準)
     avail = {}

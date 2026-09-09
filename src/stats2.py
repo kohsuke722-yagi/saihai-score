@@ -97,8 +97,9 @@ def _season_pit_counts(q):
     return c, tbf
 
 
-def _decayed(rows, asof, season_counts, season_n, half=None):
-    """窓内=個別減衰重み + 窓外=(シーズン−窓内)を一括重みで合算"""
+def _decayed(rows, asof, season_counts, season_n, half=None, row_w=None):
+    """窓内=個別減衰重み + 窓外=(シーズン−窓内)を一括重みで合算。
+    row_w=行別の追加重み関数(役割変換②-c等・Noneで従来と同一)"""
     h = half or HALFLIFE
     wc = {k: 0.0 for k in CLS}
     win = {k: 0 for k in CLS}
@@ -107,7 +108,7 @@ def _decayed(rows, asof, season_counts, season_n, half=None):
         d, o = r[0], FOLD.get(r[1], r[1])
         if o not in wc or _days(asof, d) <= 0:  # 未来不参照(当日含む)
             continue
-        wc[o] += _w(asof, d, h)
+        wc[o] += _w(asof, d, h) * (row_w(r) if row_w else 1.0)
         win[o] += 1
         n_win += 1
     n_eff = sum(wc.values())
@@ -139,8 +140,27 @@ def batter_dist2(pid, P, asof):
     return _blend(d, _self_w(n_eff, "b"))
 
 
+K_CROSS_ROLE = 0.5  # 役割変換(②-c・9/9): 直近と異なる役割で投げた打席の重み(仮置き・較正課題)
+_ROLE = {}
+
+
+def _role_sets():
+    """pitcher_ctxの登板記録から役割判定素材(先発日set・全登板list)を読む(キャッシュ)"""
+    if "starts" not in _ROLE:
+        try:
+            pc = json.load(open(os.path.join(LOGS, "pitcher_ctx.json"), encoding="utf-8"))
+            _ROLE["starts"] = {p: set(v) for p, v in (pc.get("starts") or {}).items()}
+            _ROLE["apps"] = {p: sorted(v) for p, v in (pc.get("appearances") or {}).items()}
+        except Exception:
+            _ROLE["starts"], _ROLE["apps"] = {}, {}
+    return _ROLE["starts"], _ROLE["apps"]
+
+
 def pitcher_dist2(pid, P, inning, asof):
-    """投手被打分布v2。全体(減衰)に回別ブケット(窓内)を有効TBFでブレンド"""
+    """投手被打分布v2。全体(減衰)に回別ブケット(窓内)を有効TBFでブレンド。
+    役割変換バイアス対策(②-c・9/9): 先発⇔救援の転向者は、直近役割(asof前の最終登板)と
+    異なる役割で投げた打席をK_CROSS_ROLE倍に減重(66/371人が両役割経験の実態への対処。
+    シーズン簿の残差は役割を分離できないため従来どおり=近似と明記)"""
     _, plog = _load()
     q = P.get("pit")
     rows = plog.get(pid, [])
@@ -149,12 +169,21 @@ def pitcher_dist2(pid, P, inning, asof):
         sc, sn = None, 0  # 未来参照遮断(9/7監査#5)
     if not rows and not sc:
         return dict(LEAGUE)
-    overall, n_eff = _decayed(rows, asof, sc, sn, HALF_PIT)
+    starts, apps = _role_sets()
+    stt = starts.get(pid) or set()
+    row_w = None
+    ap = [d0 for d0 in (apps.get(pid) or []) if d0 < asof] or (apps.get(pid) or [])
+    if stt and ap:
+        cur_sp = ap[-1] in stt
+        if any((d0 in stt) != cur_sp for d0 in ap):  # 両役割が混在する転向者のみ発動
+            row_w = (lambda r, _s=stt, _c=cur_sp:
+                     1.0 if ((r[0] in _s) == _c) else K_CROSS_ROLE)
+    overall, n_eff = _decayed(rows, asof, sc, sn, HALF_PIT, row_w)
     overall = _blend(overall, _self_w(n_eff, "p"))
     # 回別ブケット(窓内ログのみ・シーズンページに回別は無い)
     lo, hi = (1, 3) if inning <= 3 else (4, 6) if inning <= 6 else (7, 99)
     brows = [r for r in rows if len(r) > 2 and lo <= r[2] <= hi]
-    bd, bn = _decayed(brows, asof, None, 0, HALF_PIT)
+    bd, bn = _decayed(brows, asof, None, 0, HALF_PIT, row_w)
     wb = bn / (bn + INN_TBF)
     mix = {k: wb * bd[k] + (1 - wb) * overall[k] for k in CLS}
     s = sum(mix.values())

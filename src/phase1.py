@@ -90,10 +90,14 @@ LG_SB_SUCC = _sb_succ / _sb_att if _sb_att else 0.7
 
 ONBASE_KEYS = ("BB", "HBP", "1B", "2B", "3B", "HR")
 
+# 継投判断の当日被打ブレンド強度(9/9較正: K=100が対数損失最良。旧仮置き45は
+# 当日を信じすぎ=当日無視より悪かった。「今日の出来」の予測力は弱い、が実測結論)
+K_DAY = 100.0
+
 # 明日以降へ跨ぐコスト(future_cost)の点→勝率換算(9/7社長指摘: 大差で守護神を使う損は
 # 「今日のレバレッジ」でなく「明日の平均レバレッジ」で測るべき)。1点=10%は平均場面の
 # 実測レンジ(接戦12-15%/大差2.5%)の中庸・較正予定
-R2W_AVG = 0.10
+R2W_AVG = 0.12  # 9/9較正: 実リリーフ投入1,134場面の「1点の勝率価値」平均0.120(旧仮置き0.10)
 
 TEAM_NAME2CODE = {"巨人": "g", "DeNA": "db", "阪神": "t", "広島": "c", "中日": "d",
                   "ヤクルト": "s", "ソフトバンク": "h", "日本ハム": "f", "ロッテ": "m",
@@ -180,6 +184,9 @@ def bench_roster(mmdd, gid):
     toks = [t.strip() for t in re.split(r"<[^>]+>", html) if t.strip()]
     pit_, bat_, cur, mode = {}, {}, None, None
     for t in toks:
+        # フッター到達で終了(9/9小物修正: 採用情報・ポリシー等がベンチ野手に混入していた)
+        if "ポリシー" in t or "お問い合わせ" in t or "サイトマップ" in t or t == "採用情報":
+            break
         if t in _FULL2SHORT_T:
             cur, mode = _FULL2SHORT_T[t], None
         elif t == "投手":
@@ -191,7 +198,8 @@ def bench_roster(mmdd, gid):
         elif t == "外野手":
             mode = "b外"  # 野手はポジ群つきで保持(ベストメンバー探索の同ポジ制約・9/8)
         elif (mode and cur and not t.isdigit()
-              and not re.fullmatch(r"[右左両]投[右左両]打", t) and len(t) <= 12):
+              and not re.fullmatch(r"[右左両]投[右左両]打", t) and len(t) <= 12
+              and not re.search(r"[<>!\-=/]", t)):  # 記号入り(-->等)は選手名でない(YG安田型は通す)
             if mode == "p":
                 pit_.setdefault(cur, []).append(t)
             else:
@@ -877,7 +885,7 @@ def analyze_ph(mmdd, gid):
             pd_st = pitcher_dist2(pid_cur, P_cur, inning, asof)
             day = r.get("day_pre") or []
             if day:
-                w_day = len(day) / (len(day) + 45.0)
+                w_day = len(day) / (len(day) + K_DAY)
                 cnt = {}
                 for c_ in day:
                     cnt[c_] = cnt.get(c_, 0) + 1
@@ -981,7 +989,7 @@ def analyze_ph(mmdd, gid):
                         tm_, _, nm_ = k_.partition("|")
                         if tm_ == r["def_team"] and inn_ <= inning:
                             used_.add(pid_of(tm_, nm_))
-                    evals, wvals = {}, {}
+                    evals, wvals, fcs = {}, {}, {}
                     for pid_c in set(bullpen_candidates(r["def_team"], used_, asof,
                                                         bench_map.get(r["def_team"]))) | {pid_nw}:
                         P_c = fetch_player(pid_c)
@@ -993,12 +1001,26 @@ def analyze_ph(mmdd, gid):
                         if ev_c is None:
                             continue
                         fc_c = future_cost(pd_c, stk_c, r["def_team"], asof)
+                        fcs[pid_c] = fc_c
                         evals[pid_c] = ev_c + fc_c
                         if HAS_WP:
                             wv = wp_chain(ds_c)
                             if wv is not None:
                                 # 今日の失点はWP(=大差なら自動で軽い)・明日のコストは平均レバレッジ
                                 wvals[pid_c] = wv + fc_c * R2W_AVG
+                    # ロングリリーフの充填項(9/9フェーズ3・9/7提起②): 大差(4点以上)の継投は
+                    # 「次の3打者」でなく「残りイニングを何枚で埋めるか」も目的。候補のE_outs
+                    # (実測・期待アウト/登板)で不足分=追加で焚く腕の枚数×平均翌日コストを加算
+                    if abs(r.get("diff") or 0) >= 4 and fcs:
+                        eo_t = (PCTX.get("e_outs") or {}).get("relief", {})
+                        eo_mean = (PCTX.get("e_outs") or {}).get("relief_mean", 3.0)
+                        rem = max(0, (9 - inning + 1) * 3)
+                        fc_bar = sum(fcs.values()) / len(fcs)
+                        for pid_c in list(evals):
+                            need = max(0.0, rem - eo_t.get(pid_c, eo_mean)) / max(1.0, eo_mean)
+                            evals[pid_c] += need * fc_bar
+                            if pid_c in wvals:
+                                wvals[pid_c] += need * fc_bar * R2W_AVG
                     # またぎ続投を対抗手に追加(9/7残穴#1・9/9フェーズ3): 前の回の投手を
                     # もう1回=当日結果ブレンド+負荷+またぎ乗数。投手枠に代打消化済みなら不可(セ)。
                     # 可用性コストは登板単位の簿記なので追加登板なし=0(近似・明記)
@@ -1008,7 +1030,7 @@ def analyze_ph(mmdd, gid):
                         pd_ol = pitcher_dist2(pid_ol, P_ol, inning, asof)
                         day_o = r.get("day_old") or []
                         if day_o:
-                            w_d = len(day_o) / (len(day_o) + 45.0)
+                            w_d = len(day_o) / (len(day_o) + K_DAY)
                             cnt_o = {}
                             for c_ in day_o:
                                 cnt_o[c_] = cnt_o.get(c_, 0) + 1
@@ -1050,7 +1072,7 @@ def analyze_ph(mmdd, gid):
             # 通常のエース扱いにしない)。判断時点で見えている情報=結果論にならない。K=45較正予定
             day = r.get("day_old") or []
             if day:
-                w_day = len(day) / (len(day) + 45.0)
+                w_day = len(day) / (len(day) + K_DAY)
                 cnt = {}
                 for c_ in day:
                     cnt[c_] = cnt.get(c_, 0) + 1
