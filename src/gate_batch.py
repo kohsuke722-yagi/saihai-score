@@ -41,6 +41,12 @@ def main():
             print(f"{gid}: _final済み→スキップ", flush=True)
             skip += 1
             continue
+        if not os.path.exists(os.path.join(BASE, "data", "raw", mmdd, gid, "box.html")):
+            # ゲートはスタメン表(box raw)が必須。nightly内ではfetch.py pbpが先に走る
+            print(f"{gid}: box raw無し→スキップ(先に python src/fetch.py pbp {mmdd})",
+                  flush=True)
+            fail += 1
+            continue
         try:
             run_gate(mmdd, gid, B=B, K=K, MN=MN, pregame=False)
             ok += 1
