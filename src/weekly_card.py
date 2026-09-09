@@ -161,6 +161,14 @@ RANK_BG = ("linear-gradient(135deg,#f7d774,#e0a90f)", "linear-gradient(135deg,#e
            "linear-gradient(135deg,#e8c39a,#c08552)")
 
 
+def nochip(rows, ties):
+    """リーグ内の隣接差が全て誤差帯内の週は見出しで明言(design-weekly 1節
+    「帯がランキング差を超える週は順位を出さず差なしと言う」の可視化)"""
+    if len(rows) > 1 and all(ties[1:]):
+        return '<span class="nochip">今週は統計的に順位差なし</span>'
+    return ""
+
+
 def bar_rows(rows, mx, ties):
     """ties[i]=True は上の行との差が誤差帯内=順位を断定しない(=印・design-weekly 1節)"""
     def x_of(v):
@@ -302,6 +310,8 @@ def build(d0, d1, png=False):
          box-shadow:0 10px 28px rgba(22,33,60,.09); }}
   .lg {{ font-size:19px; font-weight:900; letter-spacing:3px; margin-bottom:10px;
         display:flex; align-items:center; gap:10px; }}
+  .nochip {{ margin-left:auto; font-size:11.5px; font-weight:900; letter-spacing:0.5px;
+            background:#eef1f7; color:#66718c; border-radius:99px; padding:3px 12px; }}
   .dot {{ width:12px; height:12px; border-radius:4px; background:#1673c9;
          box-shadow:0 0 10px rgba(22,115,201,.6); }}
   .rrow {{ display:flex; align-items:center; gap:10px; padding:8px 6px; border-top:1px solid #e6ebf4; }}
@@ -380,8 +390,8 @@ def build(d0, d1, png=False):
                + f"攻め{dunce['atk']:+.1f} / 見逃し{dunce['miss']:+.1f}(勝率換算・週平均)", False)}
   </div>
   <div class="cols">
-    <div class="col"><div class="lg"><span class="dot"></span>セ・リーグ</div>{bar_rows(ce, mx, ties_ce)}</div>
-    <div class="col"><div class="lg"><span class="dot" style="background:#f5c518;box-shadow:0 0 10px rgba(245,197,24,.7)"></span>パ・リーグ</div>{bar_rows(pa, mx, ties_pa)}</div>
+    <div class="col"><div class="lg"><span class="dot"></span>セ・リーグ{nochip(ce, ties_ce)}</div>{bar_rows(ce, mx, ties_ce)}</div>
+    <div class="col"><div class="lg"><span class="dot" style="background:#f5c518;box-shadow:0 0 10px rgba(245,197,24,.7)"></span>パ・リーグ{nochip(pa, ties_pa)}</div>{bar_rows(pa, mx, ties_pa)}</div>
   </div>
   <div class="band">{bw_card(best, "b")}{bw_card(worst, "w")}</div>
   <div class="note">数値=勝率換算の采配収支(%/試合・週平均)。攻め=実行した采配の合計/見逃し=最善を選ばなかった機会損失
