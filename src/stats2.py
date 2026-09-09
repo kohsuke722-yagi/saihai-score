@@ -123,8 +123,31 @@ def _decayed(rows, asof, season_counts, season_n, half=None, row_w=None):
     return _norm(wc), n_eff
 
 
+W_2025 = 0.5 ** (350.0 / 90.0)  # シーズン跨ぎ減衰(前季打席の一括重み≈0.067・半減期90日)
+_P25 = {}
+
+
+def _prior25(pid):
+    """2025本人分布(環境正規化済み)を(有効打席数, 分布)で返す。無ければNone(9/9フェーズ4)"""
+    if "data" not in _P25:
+        try:
+            _P25["data"] = json.load(open(os.path.join(LOGS, "batters2025.json"),
+                                          encoding="utf-8"))
+        except Exception:
+            _P25["data"] = {"players": {}, "league": {}}
+    p = _P25["data"]["players"].get(pid)
+    if not p:
+        return None
+    L25 = _P25["data"].get("league") or {}
+    adj = {k: max(1e-9, p["d"].get(k, 0.0)) * max(1e-9, LEAGUE.get(k, 1e-9))
+           / max(1e-9, L25.get(k, 1e-9)) for k in CLS}
+    ssum = sum(adj.values())
+    return p["n"] * W_2025, {k: v / ssum for k, v in adj.items()}
+
+
 def batter_dist2(pid, P, asof):
-    """打者分布v2。投手打席=標準分布。減衰重み+縮小"""
+    """打者分布v2。投手打席=標準分布。減衰重み+縮小。
+    今季サンプル僅少の選手は2025本人分布(環境正規化・シーズン跨ぎ減衰)を混合(§7-c 4)"""
     blog, _ = _load()
     b = P.get("bat")
     n_season = (b["PA"] - b["SH"]) if b else 0
@@ -135,9 +158,22 @@ def batter_dist2(pid, P, asof):
     if sc is not None and asof < P.get("fetched", "0907"):
         sc, sn = None, 0  # スナップショットにasof以降の未来打席が混入するため不使用(9/7監査#5)
     if not rows and not b:
+        pr = _prior25(pid)
+        if pr:
+            n25, d25 = pr
+            return _blend(_blend(d25, _self_w(n25, "b")), LAMBDA_BAT)
         return dict(LEAGUE)
     d, n_eff = _decayed(rows, asof, sc, sn, HALF_BAT)
-    return _blend(d, _self_w(n_eff, "b"))
+    pr = _prior25(pid)
+    if pr:
+        n25, d25 = pr
+        d = {k: (n_eff * d.get(k, 0.0) + n25 * d25.get(k, 0.0)) / (n_eff + n25)
+             for k in CLS}
+        n_eff += n25
+    # 追い縮小λ(9/9フェーズ4較正): 予測OBPの較正勾配を4カット日で実測→0.56〜0.70で一貫
+    # =現行縮小は不足(上位帯過大・下位帯過小の両端が実測)。偏差を0.65倍に圧縮。
+    # ゲート原子(lineup_gate.dist_of)への適用はFP再検証とセットで別日(通貨整合の課題)
+    return _blend(_blend(d, _self_w(n_eff, "b")), LAMBDA_BAT)
 
 
 K_CROSS_ROLE = 0.5  # 役割変換(②-c・9/9): 直近と異なる役割で投げた打席の重み(仮置き・較正課題)
@@ -187,10 +223,17 @@ def pitcher_dist2(pid, P, inning, asof):
     wb = bn / (bn + INN_TBF)
     mix = {k: wb * bd[k] + (1 - wb) * overall[k] for k in CLS}
     s = sum(mix.values())
-    return {k: v / s for k, v in mix.items()}
+    mix = {k: v / s for k, v in mix.items()}
+    # 追い縮小λ_pit(9/9フェーズ4=log5強度検証の実測回答): 短ホライズン(12-20日)の
+    # 較正勾配0.88-0.93→0.90を採用。長ホライズンでは0.4-0.6まで落ちる(投手フォームの
+    # ドリフト=ホライズン依存減衰の課題として記録)。エース級-1.3点の振れは概ね正・1割減衰
+    return _blend(mix, LAMBDA_PIT)
 
 
-K_SPLIT = 100.0  # 対左右スプリットの自立打席数(較正予定・9/8左右対応)
+LAMBDA_BAT = 0.65  # 打者分布の追い縮小(9/9較正・batter_dist2の注記参照)
+LAMBDA_PIT = 0.90  # 投手分布の追い縮小(9/9較正・pitcher_dist2の注記参照)
+K_SPLIT = 400.0  # 9/9較正: 検証5,100打席でK=400≒スプリット無視が最良。個人の左右差は
+# 今季サンプルではほぼノイズ=信号はリーグ左右比(事前分布)が担う(The Bookの追認)
 
 
 def batter_dist2_vs(pid, P, asof, vs_hand):

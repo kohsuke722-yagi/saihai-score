@@ -303,8 +303,29 @@ def make_adjuster(opp_pid, mmdd, name_hint=""):
     g = q.get("G") or 0
     w_sp = (min(0.75, max(0.35, q["TBF"] / g / 38.5))
             if g and q.get("TBF") else 0.58)
+    # w_spのE_outs個別化(9/9フェーズ4): TBF/GはスイングマンでリリーフGが分母を汚す。
+    # 実測の期待アウト/先発(pitcher_ctx)から対戦打席シェア≈E_outs/27で按分
+    opener = False
+    try:
+        eo = json.load(open(os.path.join(BASE, "data", "logs", "pitcher_ctx.json"),
+                            encoding="utf-8")).get("e_outs", {}).get("start", {})             .get(opp_pid)
+    except Exception:
+        eo = None
+    if eo:
+        w_sp = min(0.85, max(0.20, eo / 27.0))
+        opener = eo < 9.0  # 平均3回未満/先発=オープナー型(§6の検知注記)
     L = league_meta().get("league_dist") or {}
     hand = (P.get("throws") or "").strip()  # 左右スプリット切替(9/8「設計徹底」で実装)
+    # 環境条件付けv1(9/9フェーズ4): 残りイニングの想定を「リーグ平均ブルペン」から
+    # 「相手チームの実測ブルペン被打」へ(先発条件付けと同じ対数オッズ合成・二重計上なし。
+    # 球場ファクターはvenueがイベントに無くデータ拡張が要る=課題として持ち越し)
+    bp = None
+    try:
+        tc_o = _HAND.get(opp_pid, {}).get("team")
+        bp = json.load(open(os.path.join(BASE, "data", "logs", "pitcher_ctx.json"),
+                            encoding="utf-8")).get("relief_team", {}).get(tc_o)
+    except Exception:
+        bp = None
 
     def adj(d, pid=None):
         base = d
@@ -318,10 +339,19 @@ def make_adjuster(opp_pid, mmdd, name_hint=""):
             num[k] = (max(1e-9, base.get(k, 0.0)) * max(1e-9, dp.get(k, 0.0))
                       / max(1e-4, L.get(k, 0.0)))
         s = sum(num.values())
-        return {k: w_sp * num[k] / s + (1 - w_sp) * d.get(k, 0.0) for k in CLS}
+        tail = d
+        if bp:
+            num2 = {k: (max(1e-9, d.get(k, 0.0)) * max(1e-9, bp.get(k, 0.0))
+                        / max(1e-4, L.get(k, 0.0))) for k in CLS}
+            s2 = sum(num2.values())
+            # 投手側と同じ追い縮小(λ_pit=0.9)をブルペン合成にも適用
+            tail = {k: 0.9 * num2[k] / s2 + 0.1 * d.get(k, 0.0) for k in CLS}
+        return {k: w_sp * num[k] / s + (1 - w_sp) * tail.get(k, 0.0) for k in CLS}
     name = (P.get("name") or name_hint or "").replace("　", "").replace(" ", "")
     if hand in ("左", "右"):
         name += f"({hand})"
+    if opener:
+        name += "・オープナー型"  # §6検知注記: 短い先発想定=按分w_spも自動で小さい
     return adj, name, w_sp
 
 

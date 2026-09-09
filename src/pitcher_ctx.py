@@ -179,6 +179,7 @@ def main():
     # +リーグ平均リリーフ被打分布(起用価値の基準)
     avail = {}
     relief_avg = {}
+    relief_team = {}  # チーム別ブルペン被打分布(9/9フェーズ4)
     for pid, rows in pitchers.items():
         dates = appearances[pid]
         if not dates:
@@ -189,10 +190,14 @@ def main():
         relief_days = {d for d in dates if first_inns[d] > 1}
         if len(relief_days) < len(dates) * 0.5:
             continue  # 主に先発の投手は除外
+        tc_r = hand.get(pid, {}).get("team")
         for mmdd, cls, inning, st, outs in rows:
             if mmdd in relief_days and cls not in ("SH", "IBB"):
                 k = cls if cls in ("BB", "HBP", "K", "1B", "2B", "3B", "HR") else "OUT"
                 relief_avg[k] = relief_avg.get(k, 0) + 1
+                if tc_r:  # チーム別ブルペン被打(9/9フェーズ4: 環境条件付けv1の素材)
+                    rt = relief_team.setdefault(tc_r, {})
+                    rt[k] = rt.get(k, 0) + 1
         # 主力リリーフ(登板15日+)に限定=使用頻度バイアスを抑えて「連投状況→翌日登板率」を測る
         if len(relief_days) < 15:
             continue
@@ -223,6 +228,9 @@ def main():
     out["avail"] = {b: {"p": round(rate(v), 4), "n": v[1]} for b, v in sorted(avail.items())
                     if b in ("0", "1", "2")}
     out["relief_avg"] = {k: round(v / tot_ra, 5) for k, v in relief_avg.items()}
+    out["relief_team"] = {tc: {k: round(v / max(1, sum(d.values())), 5)
+                               for k, v in d.items()}
+                          for tc, d in relief_team.items() if sum(d.values()) >= 400}
     out["team_dates"] = {tc: sorted(ds, key=d_of) for tc, ds in team_dates.items()}
     print("翌日登板率(主力リリーフ・連日試合・今日までの連投数別):")
     for b, label in (("0", "今日投げてない"), ("1", "今日1日目"), ("2", "今日で2連投+")):

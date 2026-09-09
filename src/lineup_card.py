@@ -21,7 +21,7 @@ def insights(r):
     ps = r["players"]
     out = []
     if r.get("matchup"):
-        out.append(("info", f"⚔ 本日の相手先発 {r['matchup']} 込みで換算 ─ 打者ごとの対左/対右実績も反映(残りはリーグ平均ブルペン)"))
+        out.append(("info", f"⚔ 本日の相手先発 {r['matchup']} 込みで換算 ─ 打者ごとの対左/対右実績も反映(残りは相手ブルペンの実測)"))
     elif "matchup" in r:
         out.append(("info", "相手先発 未反映(中立環境換算)"))
     bats = [p["bats"] for p in ps]
@@ -198,7 +198,7 @@ def build_from_results(res, mmdd, gid, png=False):
     ga = TEAMS.get(res[0]["team"], {}).get("glow", "41,183,255")
     gh = TEAMS.get(res[1]["team"], {}).get("glow", "255,183,3")
     ev_note = ("得点期待値=9イニング換算・本日の相手先発込み(打者ごとの対左/対右実績を縮小つきで反映・"
-               "残りイニングはリーグ平均ブルペン想定)。" if all(r.get("matchup") for r in res) else
+               "残りイニングは相手ブルペンの実測被打で想定)。" if all(r.get("matchup") for r in res) else
                "得点期待値=9イニング・中立環境換算(相手投手の質は含みません)。")
     if all(r.get("blend") for r in res):
         ev_note += ("終盤の交代文化込み(スタメン以外が打席に立つ確率をイニング×打順で実測しブレンド)・"
