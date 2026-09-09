@@ -406,13 +406,50 @@ def _bunt_branches_id(rid, o, bp, b):
             (bp["leadout"], 0, lead, o + 1), (bp["fail"], 0, rid, o + 1)]
 
 
-def game_ev_speed(dists, sp, order, bunts=None):
-    """走力込みの精密EV(2段階探索の決勝用): 走者の身元を追跡し盗塁も遷移として挿入"""
+def load_blend(fixed):
+    """終盤の交代文化ブレンド(§4・9/9フェーズ2): ph_blend実測のw行列と代打プール分布。
+    w[イニング0始まり][打順位置] = スタメン以外がその打席に立つ確率(位置基準=並べ替え不変)。
+    代打プール = リーグ平均分布をPH文脈のオッズ比(ph_calib実測 rate_ph/rate_norm)で減衰
+    (残りイニング=リーグ平均ブルペン想定と整合)。データ欠落時はNone=従来動作"""
+    try:
+        PB = json.load(open(os.path.join(BASE, "data", "logs", "ph_blend.json"),
+                            encoding="utf-8"))
+        PC = json.load(open(os.path.join(BASE, "data", "logs", "ph_calib.json"),
+                            encoding="utf-8"))
+        from stats2 import league_meta
+        ld = league_meta().get("league_dist")
+    except Exception:
+        return None
+    if not ld or not PB.get("pitcher"):
+        return None
+    onbase = ("1B", "2B", "3B", "HR", "BB", "HBP")
+    rp, rn = PC.get("rate_ph", 0.285), PC.get("rate_norm", 0.307)
+    ob = sum(ld.get(k, 0.0) for k in onbase)
+    orr = (rp / (1 - rp)) / (rn / (1 - rn))
+    ob2 = orr * ob / (1 - ob + orr * ob)
+    rest0 = sum(v for k, v in ld.items() if k not in onbase)
+    d_ph = {k: (v * ob2 / ob if k in onbase else v * (1 - ob2) / rest0)
+            for k, v in ld.items()}
+    W = [[0.0] * 9 for _ in range(9)]
+    for i in range(9):
+        for s in range(9):
+            if s == fixed:
+                W[i][s] = PB["pitcher"].get(str(i + 1), 0.0)
+            else:
+                W[i][s] = PB.get("field", {}).get(str(s), {}).get(str(i + 1), 0.0)
+    return {"W": W, "d_ph": d_ph}
+
+
+def game_ev_speed(dists, sp, order, bunts=None, blend=None):
+    """走力込みの精密EV(2段階探索の決勝用): 走者の身元を追跡し盗塁も遷移として挿入。
+    blend=load_blend(): 実測「スタメン以外が立つ率」で代打プール遷移を混合(表示EV用・
+    探索/ゲート通貨は素DPのまま=9/9実務近似②を維持)"""
     d9 = [dists[i] for i in order]
     s9 = [sp[i] for i in order]
     b9 = [bunts[i] for i in order] if bunts else None
-    inn = []
-    for lead in range(9):
+    d_ph = blend["d_ph"] if blend else None
+
+    def walk(lead, wrow):
         frontier = {((None, None, None), 0, lead): 1.0}
         runs = 0.0
         nxt = defaultdict(float)
@@ -458,6 +495,14 @@ def game_ev_speed(dists, sp, order, bunts=None):
                             trans = [(p * pi, r, ns, no) for p, r, ns, no in bb] + \
                                     [(p * (1 - pi), r, ns, no) for p, r, ns, no
                                      in transitions_id(rid0, o0, d9[b], s9)]
+                    w = wrow[b] if wrow else 0.0
+                    if w > 0.004:
+                        # スタメン遷移(1-w)+代打プール遷移(w)。代打はバントしない前提
+                        # (実測π: 野手最大11%・代打はさらに稀)・走力はスロット値を継承
+                        trans = [(pr * (1 - w), rn, nr, no)
+                                 for pr, rn, nr, no in trans] + \
+                                [(pr * w, rn, nr, no) for pr, rn, nr, no
+                                 in transitions_id(rid0, o0, d_ph, s9)]
                     for pr, rn, nr, no in trans:
                         q = p0 * pr
                         runs += q * rn
@@ -468,13 +513,27 @@ def game_ev_speed(dists, sp, order, bunts=None):
                 break
         for (rid, o, bi), p in frontier.items():
             nxt[bi % 9] += p
-        inn.append((runs, dict(nxt)))
+        return runs, dict(nxt)
+
+    if not blend:
+        base = [walk(le, None) for le in range(9)]
+        tables = [base] * 9
+    else:
+        base, tables = None, []
+        for k in range(9):
+            wrow = blend["W"][k]
+            if max(wrow) < 0.005:  # 序盤=交代ほぼ無し: 基本表を共有(計算量7割減)
+                if base is None:
+                    base = [walk(le, None) for le in range(9)]
+                tables.append(base)
+            else:
+                tables.append([walk(le, wrow) for le in range(9)])
     lead = {0: 1.0}
     total = 0.0
-    for _ in range(9):
+    for k in range(9):
         nl = defaultdict(float)
         for li, p in lead.items():
-            r, nd = inn[li]
+            r, nd = tables[k][li]
             total += p * r
             for j, q in nd.items():
                 nl[j] += p * q
@@ -589,10 +648,12 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=None):
         nms = [p["name"] for p in players]
         b_desc = bunt_options_desc(tm, nms, dists, pf)
         b_norm = bunt_options(tm, nms, dists, pf)
+        # 終盤の交代文化ブレンド(§4・9/9フェーズ2): 表示EVのみ・探索/ゲートは素DP
+        blend = load_blend(fixed)
         ev_act_plain = game_ev(dists, b_desc)
-        ev_act = game_ev_speed(dists, sp, list(range(9)), b_desc)
+        ev_act = game_ev_speed(dists, sp, list(range(9)), b_desc, blend=blend)
         best, ev_best_plain = optimize(dists, fixed=fixed, bunts=b_norm)
-        ev_best = game_ev_speed(dists, sp, best, b_norm)
+        ev_best = game_ev_speed(dists, sp, best, b_norm, blend=blend)
         if ev_best < ev_act:  # 通貨差で最適が逆転する稀ケース: 実際の並びが最適
             best, ev_best = list(range(9)), ev_act
         # ベンチ注記: スタメン野手最弱よりsolo EVが高いベンチ野手(上位1名)
@@ -738,7 +799,8 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=None):
             b_norm_bm = bunt_options(tm, nms_bm, cur_d, pf)
             o_bm, _ = optimize(cur_d, fixed=fixed, restarts=1, bunts=b_norm_bm)
             sp_bm = speed_params(tc, [{"name": n} for n in nms_bm])
-            ev_bm = max(game_ev_speed(cur_d, sp_bm, o_bm, b_norm_bm), ev_best)
+            ev_bm = max(game_ev_speed(cur_d, sp_bm, o_bm, b_norm_bm, blend=blend),
+                        ev_best)
         # ベンチ最強打者がどの守備位置にも適格でない=代打専任(丸型)の判定 → カードで役割として尊重
         pinch_ace = None
         if bench_best:
@@ -772,7 +834,7 @@ def analyze_team(tm, mmdd, players, dists, fixed, bench_bat, adj=None):
             star_note = (f"★{players[star_i]['name']}は{rng}配置が良さそう"
                          f"(現{star_i + 1}番・+{gain_s:.2f}点の傾向)")
         return {"team": tm, "players": players, "fixed": fixed,
-                "star_note": star_note,
+                "star_note": star_note, "blend": bool(blend),
                 "ev_actual": round(ev_act, 3), "ev_best": round(ev_best, 3),
                 "diff": round(ev_act - ev_best, 3),
                 "ev_actual_plain": round(ev_act_plain, 3),

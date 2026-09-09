@@ -40,6 +40,7 @@ jobs:
           python3 src/runpower.py
           python3 src/ph_calib.py
           python3 src/bunt_calib.py
+          python3 src/ph_blend.py
           python3 src/defense_log.py
       - name: 選手キャッシュ鮮度(前日出場の古い/空キャッシュを再取得・9/7監査#6)
         run: python3 src/refresh_players.py
