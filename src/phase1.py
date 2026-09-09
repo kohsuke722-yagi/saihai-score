@@ -572,6 +572,8 @@ def analyze_ph(mmdd, gid):
         seq[team] += 1
         nxt = slots[team].get((s + 1) % 9)
         pk = f"{defense}|{cur_pitcher.get(defense, '')}"
+        bf_pre = bf.get(pk, 0)          # 打席前スナップショット(④拡張の決断点=結果不使用)
+        day_pre = list(day_pa.get(pk, []))
         bf[pk] = bf.get(pk, 0) + 1
         cls_day = classify(res_row)
         if cls_day and cls_day not in ("SH", "?", "IBB"):  # 申告敬遠は投手の出来でない(監査#14)
@@ -638,6 +640,23 @@ def analyze_ph(mmdd, gid):
                             "team": team, "outs": e["outs"], "state": e["runners"],
                             "batter": bat, "diff": diff, "next": nxt,
                             "bases": e.get("bases"), "pitcher": cur_pitcher.get(defense)})
+        # ④拡張(9/9裁定B・フェーズ3): 継投の見逃しスキャン(回頭+回中・終盤接戦のみ)。
+        # 回頭=前の回から続投の初打席/回中=同一投手の2打席目以降(入りたては対象外)。
+        # 盗塁指示の見逃しは不採点(選手判断と外形区別不能=グレー枠方針と整合)
+        if (e["inning"] >= 7 and abs(diff) <= 3 and cur_pitcher.get(defense)):
+            at_hd = half_pa[(e["inning"], e["half"])] == 1
+            entry_p = entry_inning.get(pk, 1)
+            if (at_hd and entry_p < e["inning"]) or (not at_hd and bf_pre >= 1):
+                results.append({"kind": "relief_scan",
+                                "scope": "head" if at_hd else "mid",
+                                "inning": e["inning"], "half": e["half"], "team": team,
+                                "def_team": defense, "outs": e["outs"],
+                                "state": e["runners"], "batter": bat, "next": nxt,
+                                "next2": slots[team].get((s + 2) % 9), "diff": diff,
+                                "cur": cur_pitcher.get(defense), "bf_pre": bf_pre,
+                                "entry": entry_p, "day_pre": day_pre,
+                                "bases": e.get("bases"),
+                                "pitcher": cur_pitcher.get(defense)})
         if any(kw in res for kw in REACH):
             reached.add(bat.replace("代打・", "").strip())
         if bat.startswith("代打"):
@@ -667,6 +686,7 @@ def analyze_ph(mmdd, gid):
                         d_[p2] = (e2["inning"], 0 if e2["half"] == "表" else 1)
             _first_app[tm] = d_
         return _first_app[tm]
+    scan_pool = []  # ④拡張: 継投見逃し候補(登板単位で最悪1件に縮約してからoutへ)
     for r in results:
         st, outs, inning = r["state"], r["outs"], r["inning"]
         dteam = r.get("def_team") or (home if r.get("team") == away else away)
@@ -822,6 +842,81 @@ def analyze_ph(mmdd, gid):
                 out.append({**r, "judge": "none", "decision": None, "engine": "ph_miss",
                             "engine_loss_wp": round(best_wp - wp_act, 4),
                             "engine_best": best_nm})
+            continue
+
+        if r["kind"] == "relief_scan":
+            # ④拡張(9/9裁定B): 「継投しなかった」見逃し幅。続投側=当日ブレンド+負荷+
+            # (先発)巡目 or (リリーフ・回頭)またぎ乗数。対抗手=可用ブルペン+翌日コスト。
+            # 損失1%以上のみ候補化し、後段で登板単位の最悪1件に縮約(カード外・通信簿の見逃し列)
+            if not HAS_WP:
+                continue
+            pid_cur = pid_of(r["def_team"], r["cur"])
+            if not pid_cur:
+                continue
+
+            def opt_dists_s(pdist_fn, thr_x):
+                ds = []
+                for idx, nm in enumerate((r.get("batter"), r.get("next"), r.get("next2"))):
+                    pidb = pid_of(r["team"], nm)
+                    if not pidb:
+                        ds.append(None)
+                        continue
+                    Pb = fetch_player(pidb)
+                    ds.append(platoon_adjust(odds_combine(batter_dist2(pidb, Pb, asof),
+                                                          pdist_fn(idx)), Pb["bats"], thr_x))
+                return ds
+
+            def wp_chain_s(ds):
+                if ds[0] is None:
+                    return None
+                c3 = mk_wc(ds[2])
+                c2 = (lambda s2, o2, d2, _d=ds[1], _c=c3:
+                      wp_state(inning, half, s2, o2, d2, _d, cont=_c))                     if ds[1] is not None else None
+                return wp_state(inning, half, st, outs, diff_a, ds[0], cont=c2, adv=adv_r)
+            P_cur = fetch_player(pid_cur)
+            pd_st = pitcher_dist2(pid_cur, P_cur, inning, asof)
+            day = r.get("day_pre") or []
+            if day:
+                w_day = len(day) / (len(day) + 45.0)
+                cnt = {}
+                for c_ in day:
+                    cnt[c_] = cnt.get(c_, 0) + 1
+                pd_st = {k2: (1 - w_day) * pd_st.get(k2, 0.0)
+                         + w_day * cnt.get(k2, 0) / len(day)
+                         for k2 in set(pd_st) | set(cnt)}
+            if r.get("entry", 1) > 1:
+                pd_st = ob_mult(pd_st, load_mult(pid_cur, asof)[0])
+                if inning > r.get("entry", 1):
+                    pd_st = ob_mult(pd_st, PCTX.get("cross", 1.0))
+            else:
+                pd_st = ob_mult(pd_st, PCTX["tto"].get(
+                    str(min(3, r.get("bf_pre", 0) // 9 + 1)), 1.0))
+            ds_st = opt_dists_s(lambda i2, _p=pd_st: _p, P_cur.get("throws", "右"))
+            wv_st = wp_chain_s(ds_st)
+            if wv_st is None:
+                continue
+            used_s = set()
+            for k_, inn_ in entry_inning.items():
+                tm_, _, nm_ = k_.partition("|")
+                if tm_ == r["def_team"] and inn_ <= inning:
+                    used_s.add(pid_of(tm_, nm_))
+            wvals_s = {}
+            for pid_c in bullpen_candidates(r["def_team"], used_s, asof,
+                                            bench_map.get(r["def_team"])):
+                if pid_c == pid_cur:
+                    continue
+                P_c = fetch_player(pid_c)
+                pd_c = ob_mult(pitcher_dist2(pid_c, P_c, inning, asof),
+                               load_mult(pid_c, asof)[0])
+                ds_c = opt_dists_s(lambda i2, _p=pd_c: _p, P_c.get("throws", "右"))
+                wv_c = wp_chain_s(ds_c)
+                if wv_c is None:
+                    continue
+                wvals_s[pid_c] = wv_c + future_cost(pd_c, rest_streak(pid_c, asof),
+                                                    r["def_team"], asof) * R2W_AVG
+            if wvals_s and wv_st - min(wvals_s.values()) >= 0.010:
+                scan_pool.append((r["def_team"], r["cur"], r.get("entry", 1),
+                                  wv_st, wvals_s, r))
             continue
 
         if r["kind"] == "relief":
@@ -1282,11 +1377,12 @@ def analyze_ph(mmdd, gid):
     # ②-d補正(9/7社長指摘): 同じ「最善」を複数の回頭で対抗手にすると方針の損を多重計上する
     # (=マルティネス不使用を4回分減点する問題)。対抗手のアームは1試合1回まで、
     # 影響の大きい見逃しから順に割り当てる(貪欲マッチング近似・真の解は割当問題=設計②-f)
+    used_arms = {}  # チーム→対抗手として消費済みのアーム(②-d・④拡張で共有)
     for tm in {r.get("def_team") for r in out if r.get("head_wvals")}:
         recs = [r for r in out if r.get("def_team") == tm and r.get("head_wvals")]
         recs.sort(key=lambda r: min(r["head_wvals"].values())
                   - r["head_wvals"].get(r.get("pid_new"), 0.0))
-        used_cf = set()
+        used_cf = used_arms.setdefault(tm, set())
         for r in recs:
             act = r.get("pid_new")
             wv = {p: v for p, v in r["head_wvals"].items() if p == act or p not in used_cf}
@@ -1297,6 +1393,27 @@ def analyze_ph(mmdd, gid):
             r["head_best_wp"] = _HAND.get(b, {}).get("name", b)
             if b != act:
                 used_cf.add(b)
+    # ④拡張の割当(9/9裁定B): 継投見逃しも「対抗手のアームは1試合1回まで」(②-d)を共有
+    # +続投登板ごとに最悪1件のみ(マルティネス不使用をN回分減点する問題の継投版を防止)
+    seen_app = set()
+    scan_pool.sort(key=lambda x: -(x[3] - min(x[4].values())))
+    for tm_, cur_, ent_, wv_st_, wvals_, r_ in scan_pool:
+        app = (tm_, cur_, ent_)
+        if app in seen_app:
+            continue
+        avail = {p: v for p, v in wvals_.items()
+                 if p not in used_arms.get(tm_, set())}
+        if not avail:
+            continue
+        b = min(avail, key=avail.get)
+        loss = wv_st_ - avail[b]
+        if loss < 0.010:
+            continue
+        seen_app.add(app)
+        used_arms.setdefault(tm_, set()).add(b)
+        out.append({**r_, "judge": "none", "decision": None, "engine": "relief_miss",
+                    "engine_loss_wp": round(loss, 4),
+                    "engine_best": _HAND.get(b, {}).get("name", b)})
     return out
 
 
@@ -1320,6 +1437,12 @@ if __name__ == "__main__":
             if r.get("engine_loss_wp"):
                 print(f"{r['inning']}回{r['half']} {r['team']} {r['outs']}死{r['state'] or '走者無'} "
                       f"見逃し代打: {r['batter']}のまま(最善:代打{r['engine_best']}) 損失 -{r['engine_loss_wp']:.2%}")
+            continue
+        if r.get("kind") == "relief_scan":
+            if r.get("engine_loss_wp"):
+                print(f"{r['inning']}回{r['half']} {r['def_team']} "
+                      f"見逃し継投({'回頭' if r.get('scope') == 'head' else '回中'}): "
+                      f"{r['cur']}続投のまま(最善:{r['engine_best']}) 損失 -{r['engine_loss_wp']:.2%}")
             continue
         if r.get("kind") == "pr":
             print(f"{r['inning']}回{r['half']} {r['team']} {r['outs']}死{r['state'] or '走者無'} 代走:{r['orig']}→{r['sub']}({r['base']}塁)")

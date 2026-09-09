@@ -38,7 +38,7 @@ def collect(d0, d1):
             if "error" in r:
                 continue
             k = r.get("kind")
-            tm = r.get("def_team") if k in ("relief", "ibb") else r.get("team")
+            tm = r.get("def_team") if k in ("relief", "ibb", "relief_scan") else r.get("team")
             if not tm:
                 continue
             gk = f"{mmdd}/{gid}"
@@ -395,7 +395,7 @@ def build(d0, d1, png=False):
   </div>
   <div class="band">{bw_card(best, "b")}{bw_card(worst, "w")}</div>
   <div class="note">数値=勝率換算の采配収支(%/試合・週平均)。攻め=実行した采配の合計/見逃し=最善を選ばなかった機会損失
-  (現状は代打の見逃しが中心・対象は順次拡大)。指示の瞬間の期待値で採点し結果は使いません。負傷交代・選択肢のない場面は採点対象外。
+  (代打と継投〈回頭・回中〉の見逃し・対象は順次拡大)。指示の瞬間の期待値で採点し結果は使いません。負傷交代・選択肢のない場面は採点対象外。
   ±=週間値の95%誤差帯(試合単位の再抽選で推定)。「=」印は上位チームとの差が誤差帯内=順位を断定しない(差なし)。</div>
   <div class="foot">@saihaiscore_lab(β試験運用)| 計算方法はnoteで全公開 | データ: NPB公式記録より自動集計</div>
 </div>
