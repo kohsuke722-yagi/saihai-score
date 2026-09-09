@@ -100,6 +100,11 @@ def main():
     except Exception as e:
         print(f"試合一覧取得失敗: {e}")
         return
+    if not gids:
+        # 9/9実害: 深夜2:15にサイト未掲載→gids空→「全中止」誤マーカーでダイジェスト全滅。
+        # 空リストは「中止」でなく「未掲載」= マーカーを書かず退出(次の便が引き取る)
+        print("試合リスト空(未掲載の可能性)→マーカー無しで退出")
+        return
     while datetime.datetime.now(JST) < deadline:
         played, undone = [], []
         for gid in gids:

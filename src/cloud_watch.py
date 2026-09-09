@@ -64,7 +64,10 @@ def main():
     if os.path.exists(os.path.join(BASE, "data", "posted", mmdd, gid)):
         print(f"{gid}: 配達済みマーカーあり→スキップ")
         return
-    while datetime.datetime.now(JST) < deadline:
+    first_pass = True  # 9/9実害対策: cron大遅延で締切超過起動→即退出だと全便が死ぬ。
+    # 最低1回は判定し、終了済みなら配達してから退出(遅延便の自己救済)
+    while first_pass or datetime.datetime.now(JST) < deadline:
+        first_pass = False
         try:
             box = get(f"{NPB}/scores/2026/{mmdd}/{gid}/box.html")
             done = ("【試合終了】" in box) or ("◇終了 " in box)

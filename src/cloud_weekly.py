@@ -99,11 +99,21 @@ def main():
     png = build(d0, d1, png=True)
     period = f"{int(d0[:2])}/{int(d0[2:])}(火)〜{int(d1[:2])}/{int(d1[2:])}(日)"
     if png:
+        # 采配ペナントレース(シーズン累計・9/9委任裁定で月曜ローテ枠に採用)
+        files = [png]
+        try:
+            from pennant_card import build as build_pennant
+            pp = build_pennant(png=True)
+            if pp:
+                files.append(pp)
+        except Exception as e:
+            print(f"ペナント生成失敗(通信簿のみ配達): {e}", flush=True)
         send(f"📊 週間 監督通信簿|{period}\n"
              f"NPB全試合の采配を勝率換算で自動採点した週間収支ランキング。\n"
              f"±は95%誤差帯・「=」は上位との差が誤差帯内(順位の断定なし)。\n"
+             f"2枚目=采配ペナントレース(シーズン累計・リーグ平均比)。\n"
              f"※β試験運用・結果は使わず指示の瞬間で採点・計算方法はnoteで全公開",
-             [png])
+             files)
         print("DELIVERED weekly", flush=True)
     else:
         send(f"📊 週間 監督通信簿|{period}\n今週は採点対象の試合がありませんでした(雨天等)。")

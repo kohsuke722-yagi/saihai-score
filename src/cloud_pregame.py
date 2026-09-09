@@ -109,7 +109,11 @@ def main():
     pending = [g for g in gids if not os.path.exists(
         os.path.join(BASE, "data", "posted", mmdd, f"{g}_lineup"))]
     print(f"{mmdd}: {len(gids)}試合・見張り対象{len(pending)} 締切{dl}", flush=True)
-    while pending and datetime.datetime.now(JST) < deadline:
+    # 9/9実害対策: 締切超過起動でも1スイープは実行(発表済み分を配達)。ただし猶予は45分
+    # (それ以上遅い便が配ると試合中に「スタメン発表」が届く=鮮度切れ。以降は日報検知に委ねる)
+    first_pass = datetime.datetime.now(JST) < deadline + datetime.timedelta(minutes=45)
+    while pending and (first_pass or datetime.datetime.now(JST) < deadline):
+        first_pass = False
         for gid in list(pending):
             try:
                 box = get(f"{NPB}/scores/2026/{mmdd}/{gid}/box.html")
