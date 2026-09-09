@@ -60,6 +60,10 @@ def pos_of(role):
     return ""
 
 
+GUILTY_BADGE = False  # 9/9夜: ROE通貨のFP延長検証9/120=7.5%>5%で不合格 → 有罪断定を
+# 一時停止(掟: FP≤5%実測が配達解禁条件)。再較正(δ拡幅スケール)合格後にTrueへ戻す
+
+
 def badge_of(r):
     """判定バッジ=P4統計ゲートの三値のみ(9/9フェーズ1配線)。
     v0固定閾値の「ほぼ最適」断定は廃止 — ゲート未実施なら断定しない(検定中)"""
@@ -68,7 +72,9 @@ def badge_of(r):
     if v == "最適域":
         return '<span class="badge ok">✔ 最適域の並び</span>'
     if v == "有意な見逃し":
-        return '<span class="badge amber">⚠ 並び替え余地(統計的に有意)</span>'
+        if GUILTY_BADGE:
+            return '<span class="badge amber">⚠ 並び替え余地(統計的に有意)</span>'
+        return '<span class="badge gray">並び差は判定不能(検定較正中)</span>'
     if v == "判定不能":
         return '<span class="badge gray">並び差は判定不能(僅差)</span>'
     return '<span class="badge gray">⏳ 並び判定は検定中</span>'

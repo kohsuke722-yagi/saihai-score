@@ -166,7 +166,8 @@ def build_game(mmdd, gid, png=False):
         note = []
         # 並び差の言及はP4三値のみ(9/9フェーズ1: 固定閾値の断定を廃止)
         g = r.get("gate") or {}
-        if g.get("verdict") == "有意な見逃し":
+        from lineup_card import GUILTY_BADGE
+        if g.get("verdict") == "有意な見逃し" and GUILTY_BADGE:
             note.append("並べ替え余地あり(統計的に有意)")
         elif g.get("verdict") == "最適域":
             note.append("並びは最適域")

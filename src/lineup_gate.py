@@ -36,7 +36,8 @@ from stats2 import (_load, _days, _season_bat_counts, _norm, _self_w,  # noqa
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-OPT_ZONE = 0.02  # 最適域の閾値(補正後点推定・optimismと同桁=帯の分解能。裁定余地あり)
+OPT_ZONE = 0.02
+DSCALE = 1.0  # δ_null拡幅のスケール(9/9夜: ROE通貨FP7.5%>5%の再較正用)  # 最適域の閾値(補正後点推定・optimismと同桁=帯の分解能。裁定余地あり)
 
 
 def batter_atoms(pid, P, asof):
@@ -200,7 +201,8 @@ def load_atoms_pregame(mmdd, gid):
     return out
 
 
-def gate_one(tm, dists, fixed, atoms9, fixed9, B, K, MN, rng, verbose=True):
+def gate_one(tm, dists, fixed, atoms9, fixed9, B, K, MN, rng, verbose=True,
+             dscale=1.0):
     """1チームの三値判定(帯内H0+optimism補正+帰無較正p値+δ拡幅=9/9最終形)"""
     t0 = time.perf_counter()
     o_best, _, top = fast_full_search(dists, fixed=fixed, topk=K)
@@ -211,7 +213,7 @@ def gate_one(tm, dists, fixed, atoms9, fixed9, B, K, MN, rng, verbose=True):
     st = gate_stat(atoms9, fixed9, actual, band, B, rng)
     # δ拡幅(9/9裁定#4): 帰無の帯資格は水増しされた首位から測るため、実測optimism分
     # 広げて対称化(FP実測8%>5%の残滓対策)
-    dl = DELTA_BAND + abs(st["optimism"])
+    dl = DELTA_BAND + dscale * abs(st["optimism"])
     his = null_band_his(atoms9, fixed9, band, B, MN, rng, delta=dl)
     v, p = verdict_of(st, his)
     c5 = sorted(his)[int(0.05 * len(his))]
@@ -234,7 +236,8 @@ def run_gate(mmdd, gid, B=400, K=200, MN=40, pregame=False, team=None):
     """1試合の三値判定を実行し data/gates/{mmdd}/ へ保存。returns 結果list"""
     rng = random.Random(20260909)
     loader = load_atoms_pregame if pregame else load_atoms
-    results = [gate_one(tm, dists, fixed, atoms9, fixed9, B, K, MN, rng)
+    results = [gate_one(tm, dists, fixed, atoms9, fixed9, B, K, MN, rng,
+                        dscale=DSCALE)
                for tm, names, dists, fixed, atoms9, fixed9 in loader(mmdd, gid)
                if not (team and tm != team)]
     outp = gates_path(mmdd, gid, final=not pregame)
@@ -308,6 +311,8 @@ def main():
     M = arg("--m", 12 if power_mode else 20)
     MN = arg("--mnull", 20 if (fp_mode or power_mode) else 40)
     tgt = args[args.index("--team") + 1] if "--team" in args else None
+    global DSCALE
+    DSCALE = float(args[args.index("--dscale") + 1]) if "--dscale" in args else 1.0
     if power_mode:
         levels = [float(x) for x in
                   (args[args.index("--levels") + 1] if "--levels" in args
