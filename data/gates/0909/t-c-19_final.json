@@ -7,40 +7,42 @@
   "K": 200,
   "M_null": 40,
   "delta": 0.005,
-  "opt_zone": 0.02
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
  },
  "teams": [
   {
-   "diff_hat": -0.0315,
-   "optimism": -0.0113,
-   "point_corr": -0.0202,
+   "diff_hat": -0.0185,
+   "optimism": -0.0062,
+   "point_corr": -0.0123,
    "band95": [
-    -0.0663,
-    0.001
+    -0.0379,
+    -0.0003
    ],
    "istar": 0,
    "B": 400,
    "team": "広島",
-   "p": 0.488,
-   "null_c5": -0.0148,
-   "verdict": "判定不能",
-   "sec": 477
+   "p": 0.341,
+   "null_c5": -0.0079,
+   "verdict": "最適域",
+   "sec": 404
   },
   {
-   "diff_hat": -0.0285,
-   "optimism": -0.014,
-   "point_corr": -0.0145,
+   "diff_hat": -0.0119,
+   "optimism": -0.007,
+   "point_corr": -0.0049,
    "band95": [
-    -0.0787,
-    0.011
+    -0.0366,
+    0.0054
    ],
    "istar": 0,
    "B": 400,
    "team": "阪神",
-   "p": 0.854,
-   "null_c5": -0.0143,
+   "p": 0.927,
+   "null_c5": -0.0109,
    "verdict": "最適域",
-   "sec": 471
+   "sec": 398
   }
  ]
 }

@@ -7,40 +7,42 @@
   "K": 200,
   "M_null": 40,
   "delta": 0.005,
-  "opt_zone": 0.02
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
  },
  "teams": [
   {
-   "diff_hat": -0.0279,
-   "optimism": -0.0145,
-   "point_corr": -0.0134,
+   "diff_hat": -0.0171,
+   "optimism": -0.0066,
+   "point_corr": -0.0105,
    "band95": [
-    -0.0645,
-    -0.0015
+    -0.0374,
+    -0.0031
    ],
    "istar": 0,
    "B": 400,
    "team": "DeNA",
-   "p": 0.39,
-   "null_c5": -0.0155,
+   "p": 0.317,
+   "null_c5": -0.0088,
    "verdict": "最適域",
-   "sec": 542
+   "sec": 401
   },
   {
-   "diff_hat": -0.0244,
-   "optimism": -0.0165,
-   "point_corr": -0.0079,
+   "diff_hat": -0.01,
+   "optimism": -0.0082,
+   "point_corr": -0.0018,
    "band95": [
-    -0.0801,
-    0.0165
+    -0.0362,
+    0.007
    ],
    "istar": 0,
    "B": 400,
    "team": "阪神",
    "p": 0.976,
-   "null_c5": -0.0092,
+   "null_c5": -0.0087,
    "verdict": "最適域",
-   "sec": 546
+   "sec": 395
   }
  ]
 }

@@ -7,40 +7,42 @@
   "K": 200,
   "M_null": 40,
   "delta": 0.005,
-  "opt_zone": 0.02
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
  },
  "teams": [
   {
-   "diff_hat": -0.0129,
-   "optimism": -0.0123,
-   "point_corr": -0.0006,
+   "diff_hat": -0.0071,
+   "optimism": -0.0068,
+   "point_corr": -0.0003,
    "band95": [
-    -0.0345,
-    0.003
+    -0.0176,
+    0.0013
    ],
-   "istar": 1,
+   "istar": 0,
    "B": 400,
    "team": "西武",
    "p": 0.537,
-   "null_c5": -0.0065,
+   "null_c5": -0.0047,
    "verdict": "最適域",
-   "sec": 537
+   "sec": 529
   },
   {
-   "diff_hat": -0.0194,
-   "optimism": -0.0086,
-   "point_corr": -0.0108,
+   "diff_hat": -0.0103,
+   "optimism": -0.0043,
+   "point_corr": -0.0059,
    "band95": [
-    -0.0472,
-    0.0038
+    -0.0237,
+    0.0007
    ],
-   "istar": 14,
+   "istar": 0,
    "B": 400,
    "team": "オリックス",
-   "p": 0.78,
-   "null_c5": -0.012,
+   "p": 0.512,
+   "null_c5": -0.0058,
    "verdict": "最適域",
-   "sec": 504
+   "sec": 481
   }
  ]
 }
