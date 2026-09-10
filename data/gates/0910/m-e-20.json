@@ -1,0 +1,48 @@
+{
+ "mmdd": "0910",
+ "gid": "m-e-20",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0087,
+   "optimism": -0.0061,
+   "point_corr": -0.0026,
+   "band95": [
+    -0.0233,
+    0.0049
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "楽天",
+   "p": 0.952,
+   "null_c5": -0.0046,
+   "verdict": "最適域",
+   "sec": 159
+  },
+  {
+   "diff_hat": -0.0242,
+   "optimism": -0.0049,
+   "point_corr": -0.0193,
+   "band95": [
+    -0.039,
+    -0.0095
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "ロッテ",
+   "p": 0.095,
+   "null_c5": -0.0037,
+   "verdict": "最適域",
+   "sec": 157
+  }
+ ]
+}
