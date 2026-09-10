@@ -9,6 +9,7 @@ data/events2025/
 
 # 秘密情報(Discord Webhook等)
 .secrets/
+.claude/
 
 # 内部メモ・デザイン試作(公開対象外)
 docs/
