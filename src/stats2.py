@@ -172,7 +172,7 @@ def batter_dist2(pid, P, asof):
         n_eff += n25
     # 追い縮小λ(9/9フェーズ4較正): 予測OBPの較正勾配を4カット日で実測→0.56〜0.70で一貫
     # =現行縮小は不足(上位帯過大・下位帯過小の両端が実測)。偏差を0.65倍に圧縮。
-    # ゲート原子(lineup_gate.dist_of)への適用はFP再検証とセットで別日(通貨整合の課題)
+    # ゲート原子(lineup_gate.dist_of)にも9/10適用済み(通貨統一・FP再検証とセット)
     return _blend(_blend(d, _self_w(n_eff, "b")), LAMBDA_BAT)
 
 

@@ -19,40 +19,16 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def collect_daily():
-    """日付×チームの采配収支(%WP・週間通信簿と同じ定義)"""
-    daily = {}
-    dates = set()
-    for f in glob.glob(os.path.join(BASE, "data", "out", "*", "*_ph.json")):
-        mmdd = os.path.basename(os.path.dirname(f))
-        if not mmdd.isdigit():
-            continue
-        try:
-            recs = json.load(open(f, encoding="utf-8"))
-        except Exception:
-            continue
-        for r in recs:
-            if "error" in r:
-                continue
-            k = r.get("kind")
-            tm = r.get("def_team") if k in ("relief", "ibb", "relief_scan") else r.get("team")
-            if not tm:
-                continue
-            v = 0.0
-            if r.get("decision") is not None:
-                if k == "swing" and not r.get("counted"):
-                    continue
-                w = r.get("decision_wp_net", r.get("decision_wp"))
-                v = (w or 0.0) * 100
-            elif r.get("decision_head_wp") is not None:
-                v = r["decision_head_wp"] * 100
-            elif r.get("engine_loss_wp"):
-                v = -r["engine_loss_wp"] * 100
-            else:
-                continue
-            daily.setdefault(tm, {}).setdefault(mmdd, 0.0)
-            daily[tm][mmdd] += v
-            dates.add(mmdd)
-    return daily, sorted(dates)
+    """日付×チームの采配収支(%WP・週間通信簿と同じ定義)。
+    コミット済み日次集計簿(pennant_daily.json)を土台に、手元に_ph.jsonがある
+    (チーム,日)は最新値で上書き(9/10: ランナーに_phが無く累計が空になる穴の恒久対策。
+    集計ロジック本体はpennant_daily.team_day_valuesへ移設)"""
+    from pennant_daily import load_book, scan_local
+    daily = {tm: dict(dd) for tm, dd in load_book()["daily"].items()}
+    for tm, dd in scan_local().items():
+        daily.setdefault(tm, {}).update(dd)
+    dates = sorted({d for dd in daily.values() for d in dd})
+    return daily, dates
 
 
 def chart(teams, daily, dates, w=470, h=300):

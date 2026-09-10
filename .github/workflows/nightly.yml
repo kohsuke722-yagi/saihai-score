@@ -44,6 +44,8 @@ jobs:
           python3 src/defense_log.py
       - name: 選手キャッシュ鮮度(前日出場の古い/空キャッシュを再取得・9/7監査#6)
         run: python3 src/refresh_players.py
+      - name: ペナント日次集計(前日_phを現行モデルで計算→pennant_daily.json追記・9/10)
+        run: python3 src/pennant_daily.py --append $MMDD
       - name: 自己検診日報(design-ops 1節・Discordへ1メッセージ)
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
