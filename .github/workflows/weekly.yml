@@ -1,11 +1,8 @@
-# 週間監督通信簿の月曜朝便(9/9フェーズ1・design-weekly 1節)
-# watch.ymlと別WF・8:00 JST目安・雨天等で試合が無い週も動く(テキスト通知)
-# cron遅延・不発対策でバックアップ便あり。二重配達はweeklyマーカーで防止
+# 週間監督通信簿(9/9フェーズ1・design-weekly 1節)
+# 9/10社長裁定: 自動配信は停止(画像商品=毎日の試合カード+打順カードの2枚のみ)。
+# 週次画像はCLIで相談しながら作る運用 → 手動dispatch枠のみ残す
 name: weekly-tsushinbo
 on:
-  schedule:
-    - cron: '0 23 * * 0'    # 月曜 08:00 JST
-    - cron: '40 23 * * 0'   # 月曜 08:40 JST バックアップ
   workflow_dispatch:
     inputs:
       d0:
