@@ -24,17 +24,18 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def resolve_pid(mmdd, gid, tm, nm, ids2, ids):
-    """イベント参加者簿→無ければroster/名鑑フォールバック(9/10恒久修正)。
+    """イベント参加者簿→box/roster/名鑑フォールバック(9/10恒久修正)。
     スタメン発表に載ったまま1打席も立たず交代した選手はイベントに現れず
     参加者簿だけではpid不明になる(0908 b-l-21 西武・桑原の実例=中堅で先発も
-    初打席前に交代)。試合前ローダーと同じ解決経路を夜間側にも配線"""
+    初打席前に交代)。box.htmlのリンクが最優先(表記完全一致・常時掲載)"""
     pid = (ids2.get(tm) or {}).get(nm) or ids.get(nm)
     if pid:
         return pid
-    from pregame_card import roster_ids, resolve_pid_fallback
+    from pregame_card import roster_ids, box_ids, resolve_pid_fallback
     from phase1 import TEAM_NAME2CODE, _norm_name
-    rids = roster_ids(mmdd, gid)
-    return (rids.get(tm) or {}).get(_norm_name(nm)) or \
+    n0 = _norm_name(nm)
+    return (box_ids(mmdd, gid).get(tm) or {}).get(n0) or \
+        (roster_ids(mmdd, gid).get(tm) or {}).get(n0) or \
         resolve_pid_fallback(TEAM_NAME2CODE.get(tm, ""), nm)
 
 

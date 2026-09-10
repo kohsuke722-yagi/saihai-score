@@ -182,7 +182,8 @@ def load_atoms_pregame(mmdd, gid):
     """試合前用ローダー: イベント(playbyplay)が無くてもbox/rosterから読む。
     pid解決・投手判定はpregame_card.build_gameと同一手順(カードとの通貨統一)。
     分布はゲート通貨=素DP(相手先発補正なし・9/9実務近似②の根拠のまま)"""
-    from pregame_card import roster_ids, resolve_pid_fallback, CODE2NAME
+    from pregame_card import (roster_ids, box_ids, resolve_pid_fallback,
+                              CODE2NAME)
     from runners import parse_box_lineup
     from stats import fetch_player
     from stats2 import batter_dist2
@@ -195,6 +196,8 @@ def load_atoms_pregame(mmdd, gid):
     if not home or not away:
         raise RuntimeError(f"チームコード不明: {gid}")
     rids = roster_ids(mmdd, gid)
+    for _tm, _d in box_ids(mmdd, gid).items():
+        rids.setdefault(_tm, {}).update(_d)  # box.htmlリンク最優先(9/10恒久修正)
     out = []
     for tm, l in ((away, lu[0]), (home, lu[1])):
         tc = TEAM_NAME2CODE[tm]

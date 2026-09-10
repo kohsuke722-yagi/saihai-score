@@ -25,9 +25,9 @@ if hasattr(sys.stdout, "reconfigure"):
 CODE2NAME = {v: k for k, v in TEAM_NAME2CODE.items()}
 
 
-def roster_ids(mmdd, gid):
-    """試合前roster.htmlの選手リンクからチーム別 name→pid(box短縮名と同一表記・最良の解決源)"""
-    path = os.path.join(BASE, "data", "raw", mmdd, gid, "roster.html")
+def _page_ids(path):
+    """ページ内の選手リンク(players/{pid}.html>名前)をチーム別 name→pid に。
+    チーム帰属=直前のフルネーム見出し(ナビ見出しは全リンクより前なので実害なし)"""
     if not os.path.exists(path):
         return {}
     html = open(path, encoding="utf-8").read()
@@ -42,6 +42,19 @@ def roster_ids(mmdd, gid):
         if tm:
             out.setdefault(tm, {})[_norm_name(m.group(2))] = m.group(1)
     return out
+
+
+def box_ids(mmdd, gid):
+    """box.html(スタメン表そのもの)の選手リンクからname→pid(9/10恒久修正)。
+    発表時点で全スタメンのリンクが載り、parse_box_lineupと同一表記=最良の解決源。
+    実例: 0910 db-s-22 井上朋=名鑑に無い昇格選手+roster.htmlが空でpid不明→ゲート不発"""
+    return _page_ids(os.path.join(BASE, "data", "raw", mmdd, gid, "box.html"))
+
+
+def roster_ids(mmdd, gid):
+    """試合前roster.htmlの選手リンクからチーム別 name→pid(第二の解決源。
+    9/10発見: 試合前はリンク0件の空ページのことがある — box_idsを先に使うこと)"""
+    return _page_ids(os.path.join(BASE, "data", "raw", mmdd, gid, "roster.html"))
 
 
 def resolve_pid_fallback(tc, nm):
@@ -93,6 +106,8 @@ def build_game(mmdd, gid, png=False):
         return False
     _, bench_bat = bench_roster(mmdd, gid)
     rids = roster_ids(mmdd, gid)
+    for tm, d in box_ids(mmdd, gid).items():
+        rids.setdefault(tm, {}).update(d)  # box.htmlのリンクを最優先(9/10恒久修正)
     battery = pregame_starters(mmdd, gid)
 
     def starter_of(tm, l):
