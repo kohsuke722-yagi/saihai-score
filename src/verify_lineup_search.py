@@ -23,6 +23,21 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
+def resolve_pid(mmdd, gid, tm, nm, ids2, ids):
+    """イベント参加者簿→無ければroster/名鑑フォールバック(9/10恒久修正)。
+    スタメン発表に載ったまま1打席も立たず交代した選手はイベントに現れず
+    参加者簿だけではpid不明になる(0908 b-l-21 西武・桑原の実例=中堅で先発も
+    初打席前に交代)。試合前ローダーと同じ解決経路を夜間側にも配線"""
+    pid = (ids2.get(tm) or {}).get(nm) or ids.get(nm)
+    if pid:
+        return pid
+    from pregame_card import roster_ids, resolve_pid_fallback
+    from phase1 import TEAM_NAME2CODE, _norm_name
+    rids = roster_ids(mmdd, gid)
+    return (rids.get(tm) or {}).get(_norm_name(nm)) or \
+        resolve_pid_fallback(TEAM_NAME2CODE.get(tm, ""), nm)
+
+
 def load_teams(mmdd, gid):
     """analyze_lineup()の読み込み部と同一手順で(team, names, dists, fixed)を返す"""
     lineup = parse_box_lineup(mmdd, gid)
@@ -36,7 +51,7 @@ def load_teams(mmdd, gid):
         names, dists, fixed = [], [], None
         for s0 in range(9):
             role, nm = lu.get(s0, ("", ""))
-            pid = (ids2.get(tm) or {}).get(nm) or ids.get(nm)
+            pid = resolve_pid(mmdd, gid, tm, nm, ids2, ids)
             if not pid:
                 raise RuntimeError(f"pid不明: {tm} {nm}")
             P = fetch_player(pid)

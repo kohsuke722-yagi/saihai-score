@@ -162,13 +162,14 @@ def load_atoms(mmdd, gid):
     from analyze import game_ids, game_ids2
     from runners import parse_box_lineup
     from stats import fetch_player
+    from verify_lineup_search import resolve_pid
     ids2 = game_ids2(mmdd, gid)
     ids = game_ids(mmdd, gid)
     out = []
     for tm, names, dists, fixed in load_teams(mmdd, gid):
         atoms9, fixed9, prior9 = [], [], []
         for i, nm in enumerate(names):
-            pid = (ids2.get(tm) or {}).get(nm) or ids.get(nm)
+            pid = resolve_pid(mmdd, gid, tm, nm, ids2, ids)
             a, f, pr = batter_atoms(pid, fetch_player(pid), mmdd)
             atoms9.append(a)
             fixed9.append(f)
