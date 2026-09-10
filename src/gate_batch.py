@@ -20,6 +20,18 @@ JST = datetime.timezone(datetime.timedelta(hours=9))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+
+def _has_events(mmdd, gid):
+    """イベント行が1つでもあるか(中止試合=0行の器を除外・9/10)"""
+    import json
+    try:
+        ev = json.load(open(os.path.join(BASE, "data", "events", mmdd,
+                                         f"{gid}.json"), encoding="utf-8"))
+        rows = ev if isinstance(ev, list) else ev.get("events", [])
+        return len(rows) > 0
+    except Exception:
+        return False
+
 # 本走設定(9/9の最終検品と同値: K200/B400/M_null40・7.2分/チーム級)
 B, K, MN = 400, 200, 40
 
@@ -39,6 +51,11 @@ def main():
     for gid in gids:
         if os.path.exists(gates_path(mmdd, gid, final=True)):
             print(f"{gid}: _final済み→スキップ", flush=True)
+            skip += 1
+            continue
+        if not _has_events(mmdd, gid):
+            # 雨天中止等: イベント0行の器だけ残る(0908 t-c-19の実例)。ゲート対象外
+            print(f"{gid}: イベント0行(中止試合)→スキップ", flush=True)
             skip += 1
             continue
         if not os.path.exists(os.path.join(BASE, "data", "raw", mmdd, gid, "box.html")):

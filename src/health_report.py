@@ -167,12 +167,15 @@ def check_accept(snap):
 
 
 def check_gates(mmdd):
-    """P4ゲート進捗: 前夜バッチ分(前日の試合)の_final確定数"""
+    """P4ゲート進捗: 前夜バッチ分(前日の試合)の_final確定数。
+    中止試合(イベント0行の器)は分母から除外(9/10・0908 t-c-19の実例)"""
     prev = day_before(mmdd)
     evdir = os.path.join(BASE, "data", "events", prev)
     if not os.path.isdir(evdir):
         return f"✅ ゲート: {int(prev[:2])}/{int(prev[2:])}は試合なし", False
-    gids = [f[:-5] for f in os.listdir(evdir) if f.endswith(".json")]
+    from gate_batch import _has_events
+    gids = [f[:-5] for f in os.listdir(evdir) if f.endswith(".json")
+            and _has_events(prev, f[:-5])]
     gdir = os.path.join(BASE, "data", "gates", prev)
     done = sum(1 for g in gids
                if os.path.exists(os.path.join(gdir, f"{g}_final.json")))
