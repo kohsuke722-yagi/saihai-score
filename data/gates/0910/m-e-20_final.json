@@ -1,0 +1,48 @@
+{
+ "mmdd": "0910",
+ "gid": "m-e-20",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0087,
+   "optimism": -0.0057,
+   "point_corr": -0.003,
+   "band95": [
+    -0.0266,
+    0.0039
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "楽天",
+   "p": 0.951,
+   "null_c5": -0.005,
+   "verdict": "最適域",
+   "sec": 518
+  },
+  {
+   "diff_hat": -0.0243,
+   "optimism": -0.0051,
+   "point_corr": -0.0192,
+   "band95": [
+    -0.0423,
+    -0.0087
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "ロッテ",
+   "p": 0.049,
+   "null_c5": -0.0022,
+   "verdict": "有意な見逃し",
+   "sec": 498
+  }
+ ]
+}
