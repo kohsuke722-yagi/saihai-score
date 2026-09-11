@@ -1,24 +1,28 @@
-# スタメン発表見張り→打順カード→Discord配達(9/8社長要望)
+# スタメン発表見張り→打順カード→Discord配達(9/8社長要望・9/11リレー方式に改修)
 # 発表時刻の実勢: ナイター(18:00)は16時台・デーゲーム(13:00/14:00)は11時台。
-# GitHubのcron遅延対策で発火を分散(watch.ymlと同思想)。二重配達はマーカーで防止。
+# GitHubのcronは実測4〜4.5h遅延する(9/8〜9/10)ため発火時刻に頼らない: 始発を早朝に置き、
+# 各便は退出時に未配達が残っていれば次便をworkflow_dispatchで即時起動(リレー・watch.ymlと同方式)。
+# 門限18:40(ナイター開始後は鮮度切れ)まで連鎖。二重配達は_lineupマーカーで防止。
 name: pregame-lineup
 on:
   schedule:
-    - cron: '57 1 * * *'   # 10:57 JST デーゲーム便
-    - cron: '37 2 * * *'   # 11:37 JST デーゲーム便バックアップ
-    - cron: '57 6 * * *'   # 15:57 JST ナイター便
-    - cron: '37 7 * * *'   # 16:37 JST ナイター便バックアップ1
-    - cron: '17 8 * * *'   # 17:17 JST ナイター便バックアップ2
-    - cron: '47 8 * * *'   # 17:47 JST ナイター便バックアップ3(9/8夜cron3本不発の教訓)
-    - cron: '27 9 * * *'   # 18:27 JST 最終便(発表遅延・cron大遅延の保険)
+    - cron: '17 21 * * *'  # 06:17 JST 始発(4.5h遅延しても10:47=デーゲーム発表前に間に合う)
+    - cron: '17 0 * * *'   # 09:17 JST 保険1(リレー連鎖が死んだ時の復旧便)
+    - cron: '17 3 * * *'   # 12:17 JST 保険2(大遅延でも16時台=ナイター発表に間に合う)
+    - cron: '17 5 * * *'   # 14:17 JST 保険3(大遅延でも18時台=猶予45分内で発表済み分を回収)
   workflow_dispatch:
     inputs:
       mmdd:
         description: 'MMDD(省略=今日JST)'
         required: false
+      hop:
+        description: 'リレー世代(自動連鎖用・手動起動は空でよい)'
+        required: false
+        default: '0'
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: pregame-lineup
@@ -39,6 +43,29 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           BROWSER_BIN: /usr/bin/google-chrome
           MMDD: ${{ inputs.mmdd }}
-          # デーゲーム便は14:10退出・ナイター便は18:40退出
-          DEADLINE: ${{ (github.event.schedule == '57 1 * * *' || github.event.schedule == '37 2 * * *') && '14:10' || '18:40' }}
-        run: python3 src/cloud_pregame.py --deadline $DEADLINE
+        run: python3 src/cloud_pregame.py --deadline 18:40
+
+  # リレー: 見張り便の退出後、未配達が残っていれば次便を即時起動して連鎖する
+  relay:
+    needs: watch
+    if: always()  # 見張りジョブが失敗しても連鎖は継続(復旧を兼ねる)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4  # 最新の_lineupマーカーを含む状態で判定
+      - id: chk
+        env:
+          MMDD: ${{ inputs.mmdd }}
+          SUFFIX: _lineup
+        run: python3 src/cloud_plan.py
+      - if: steps.chk.outputs.has == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MMDD: ${{ inputs.mmdd }}
+          HOP: ${{ github.event.inputs.hop || '0' }}
+        run: |
+          now=$(TZ=Asia/Tokyo date +%H%M)
+          if [ "$now" -ge 1840 ] || [ "$now" -lt 600 ]; then
+            echo "門限(18:40〜翌6:00)→終業。未配達は日報が検知する"; exit 0; fi
+          if [ "$HOP" -ge 40 ]; then echo "リレー40世代到達→暴走保険で停止"; exit 0; fi
+          gh workflow run pregame.yml -f mmdd="$MMDD" -f hop="$((HOP + 1))"
+          echo "未配達あり→次便をdispatch(hop $((HOP + 1)))"

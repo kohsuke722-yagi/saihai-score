@@ -2,7 +2,8 @@
 """スタメン発表見張り(GitHub Actions用・9/8社長「発表されたらすぐカード→Discord」)
 - 当日全試合のbox.htmlをポーリングし、スタメン発表を検知したら打順カード生成→Discord配達
 - 配達済みは data/posted/{mmdd}/{gid}_lineup マーカー(cloud_watchと同機構)で二重配達防止
-- 中止検知でマーカーを残して以降の便も止める。--deadlineで必ず退出(次の便が引き取る)
+- 中止検知でマーカーを残して以降の便も止める。--deadlineで必ず退出。加えて起動+190分でも
+  自主退出(ジョブ強制kill220分の手前)。未配達分はリレー便が引き取る(9/11リレー方式)
 Usage: python src/cloud_pregame.py [mmdd] --deadline 18:40
 """
 import datetime
@@ -101,6 +102,9 @@ def main():
     dl = args[args.index("--deadline") + 1] if "--deadline" in args else "18:40"
     deadline = datetime.datetime.now(JST).replace(
         hour=int(dl[:2]), minute=int(dl[3:5]), second=0, microsecond=0)
+    soft = datetime.datetime.now(JST) + datetime.timedelta(minutes=190)
+    if soft < deadline:
+        deadline, dl = soft, soft.strftime("%H:%M")
     try:
         gids = [u.rstrip("/").split("/")[-1] for u in game_urls(mmdd)]
     except Exception as e:
@@ -142,7 +146,7 @@ def main():
         if pending:
             time.sleep(150)
     print(f"退出: 残り{len(pending)}試合"
-          f"({'全配達済み' if not pending else '次の便が引き取る'})", flush=True)
+          f"({'全配達済み' if not pending else 'リレー/次の便が引き取る'})", flush=True)
 
 
 if __name__ == "__main__":
