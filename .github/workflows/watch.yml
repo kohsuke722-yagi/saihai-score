@@ -1,23 +1,30 @@
-# 試合見張り→終了直後にカード生成→Discord配達(9/4 GitHub移行)
-# GitHubのcronは大幅遅延・不発があるため発火チャンスを1日5回に分散(9/4夜の実測: 昼便4.5h遅延+夜便不発)。
+# 試合見張り→終了直後にカード生成→Discord配達(9/4 GitHub移行・9/11リレー方式に改修)
+# GitHubのcronは実測4〜4.5h遅延する(9/8〜9/10連続観測)。夜便を夕方に置く旧方式では起動が
+# 全試合終了後になり「終わってから一括配達」になった(9/10実害: 5試合が22:07に集中)。
+# 対策=リレー方式: 始発cronを朝に早出しし、各便は退出時に未配達が残っていれば次便を
+# workflow_dispatchで即時起動(dispatchはcron遅延の影響を受けない)。門限23:20まで連鎖して
+# 見張りが途切れず、各試合は終了検知(180秒ポーリング)から数分で配達される。
 # concurrencyで同時実行を禁止(=二重配達防止)。postedマーカーで配達済み試合はスキップ。
-# 昼便(12時台)は17:15で必ず退出し、夕方以降の便が未配達分を引き取る
 name: watch-games
 on:
   schedule:
-    - cron: '17 3 * * *'   # 12:17 JST 昼便
-    - cron: '57 3 * * *'   # 12:57 JST 昼便バックアップ
-    - cron: '47 8 * * *'   # 17:47 JST 夜便
-    - cron: '27 9 * * *'   # 18:27 JST 夜便バックアップ1
-    - cron: '7 10 * * *'   # 19:07 JST 夜便バックアップ2
+    - cron: '47 22 * * *'  # 07:47 JST 始発(4.5h遅延しても12:17=デーゲーム開始頃に間に合う)
+    - cron: '17 2 * * *'   # 11:17 JST 保険1(リレー連鎖が死んだ時の復旧便)
+    - cron: '17 5 * * *'   # 14:17 JST 保険2
+    - cron: '17 8 * * *'   # 17:17 JST 保険3(大遅延でも21時台=ナイター終了前後に起動)
   workflow_dispatch:
     inputs:
       mmdd:
         description: 'MMDD(省略=今日JST)'
         required: false
+      hop:
+        description: 'リレー世代(自動連鎖用・手動起動は空でよい)'
+        required: false
+        default: '0'
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: watch-games
@@ -54,5 +61,28 @@ jobs:
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           BROWSER_BIN: /usr/bin/google-chrome
-          DEADLINE: ${{ (github.event.schedule == '17 3 * * *' || github.event.schedule == '57 3 * * *') && '17:15' || '23:20' }}
-        run: python3 src/cloud_watch.py ${{ needs.plan.outputs.mmdd }} ${{ matrix.gid }} --deadline $DEADLINE
+        run: python3 src/cloud_watch.py ${{ needs.plan.outputs.mmdd }} ${{ matrix.gid }} --deadline 23:20
+
+  # リレー: 全見張りジョブの退出後、未配達が残っていれば次便を即時起動して連鎖する
+  relay:
+    needs: [plan, watch]
+    if: always() && needs.plan.outputs.has == 'true'  # 一部ジョブが失敗しても連鎖は継続
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4  # matrixがpushした最新postedマーカーを含む状態で判定
+      - id: chk
+        env:
+          MMDD: ${{ needs.plan.outputs.mmdd }}
+        run: python3 src/cloud_plan.py
+      - if: steps.chk.outputs.has == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MMDD: ${{ needs.plan.outputs.mmdd }}
+          HOP: ${{ github.event.inputs.hop || '0' }}
+        run: |
+          now=$(TZ=Asia/Tokyo date +%H%M)
+          if [ "$now" -ge 2320 ] || [ "$now" -lt 600 ]; then
+            echo "門限(23:20〜翌6:00)→終業。未配達は翌朝の日報が検知する"; exit 0; fi
+          if [ "$HOP" -ge 40 ]; then echo "リレー40世代到達→暴走保険で停止"; exit 0; fi
+          gh workflow run watch.yml -f mmdd="$MMDD" -f hop="$((HOP + 1))"
+          echo "未配達あり→次便をdispatch(hop $((HOP + 1)))"

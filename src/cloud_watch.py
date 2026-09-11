@@ -2,7 +2,8 @@
 """クラウド見張り(1試合・GitHub Actions用): 終了検知→取得→采配計算→カード→Discord配達
 - watch_game.pyのクラウド版。配達後に data/posted/{mmdd}/{gid} マーカーをcommit&push
   (昼便と夜便の二重配達防止。競合はpull --rebaseリトライで解決)
-- --deadline HH:MM (JST) で必ず退出。昼便17:15退出→夜便が未配達分を引き取る設計
+- --deadline HH:MM (JST) で必ず退出。加えて起動+320分でも自主退出
+  (ジョブ強制kill355分の手前で綺麗に抜ける)。未配達分はリレー便が引き取る(9/11リレー方式)
 Usage: python src/cloud_watch.py 0904 d-c-23 --deadline 23:20
 """
 import datetime
@@ -61,6 +62,9 @@ def main():
     dl = sys.argv[sys.argv.index("--deadline") + 1] if "--deadline" in sys.argv else "23:20"
     now = datetime.datetime.now(JST)
     deadline = now.replace(hour=int(dl[:2]), minute=int(dl[3:5]), second=0, microsecond=0)
+    soft = now + datetime.timedelta(minutes=320)
+    if soft < deadline:
+        deadline, dl = soft, soft.strftime("%H:%M")
     if os.path.exists(os.path.join(BASE, "data", "posted", mmdd, gid)):
         print(f"{gid}: 配達済みマーカーあり→スキップ")
         return
@@ -108,7 +112,7 @@ def main():
             commit_marker(mmdd, gid)
             return
         time.sleep(180)
-    print(f"{gid}: 締切{dl}到達・未終了のまま退出(次の便が引き取る)")
+    print(f"{gid}: 締切{dl}到達・未終了のまま退出(リレー/次の便が引き取る)")
 
 
 if __name__ == "__main__":
