@@ -1,0 +1,48 @@
+{
+ "mmdd": "0914",
+ "gid": "t-d-24",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0069,
+   "optimism": -0.0067,
+   "point_corr": -0.0002,
+   "band95": [
+    -0.0249,
+    0.0058
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "中日",
+   "p": 1.0,
+   "null_c5": -0.0069,
+   "verdict": "最適域",
+   "sec": 79
+  },
+  {
+   "diff_hat": -0.0051,
+   "optimism": -0.0054,
+   "point_corr": 0.0003,
+   "band95": [
+    -0.0196,
+    0.0054
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "阪神",
+   "p": 1.0,
+   "null_c5": -0.0105,
+   "verdict": "最適域",
+   "sec": 71
+  }
+ ]
+}
