@@ -1,0 +1,48 @@
+{
+ "mmdd": "0915",
+ "gid": "b-h-21",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0078,
+   "optimism": -0.0055,
+   "point_corr": -0.0023,
+   "band95": [
+    -0.0224,
+    0.0022
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "ソフトバンク",
+   "p": 0.714,
+   "null_c5": -0.0033,
+   "verdict": "最適域",
+   "sec": 165
+  },
+  {
+   "diff_hat": -0.0145,
+   "optimism": -0.0025,
+   "point_corr": -0.0119,
+   "band95": [
+    -0.0286,
+    -0.0023
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "オリックス",
+   "p": 0.238,
+   "null_c5": -0.0033,
+   "verdict": "最適域",
+   "sec": 153
+  }
+ ]
+}
