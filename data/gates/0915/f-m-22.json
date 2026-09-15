@@ -1,0 +1,48 @@
+{
+ "mmdd": "0915",
+ "gid": "f-m-22",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0147,
+   "optimism": -0.0049,
+   "point_corr": -0.0098,
+   "band95": [
+    -0.0273,
+    -0.005
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "ロッテ",
+   "p": 0.19,
+   "null_c5": -0.0055,
+   "verdict": "最適域",
+   "sec": 152
+  },
+  {
+   "diff_hat": -0.0128,
+   "optimism": -0.004,
+   "point_corr": -0.0087,
+   "band95": [
+    -0.0279,
+    0.0019
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "日本ハム",
+   "p": 0.619,
+   "null_c5": -0.0024,
+   "verdict": "最適域",
+   "sec": 153
+  }
+ ]
+}
