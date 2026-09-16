@@ -1,0 +1,48 @@
+{
+ "mmdd": "0916",
+ "gid": "b-h-22",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0058,
+   "optimism": -0.0048,
+   "point_corr": -0.0011,
+   "band95": [
+    -0.0169,
+    0.0023
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "ソフトバンク",
+   "p": 0.732,
+   "null_c5": -0.0048,
+   "verdict": "最適域",
+   "sec": 467
+  },
+  {
+   "diff_hat": -0.0123,
+   "optimism": -0.0042,
+   "point_corr": -0.0081,
+   "band95": [
+    -0.0219,
+    -0.0029
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "オリックス",
+   "p": 0.171,
+   "null_c5": -0.0044,
+   "verdict": "最適域",
+   "sec": 477
+  }
+ ]
+}
