@@ -1,0 +1,48 @@
+{
+ "mmdd": "0917",
+ "gid": "s-db-23",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0095,
+   "optimism": -0.0066,
+   "point_corr": -0.0029,
+   "band95": [
+    -0.0217,
+    0.0002
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "DeNA",
+   "p": 0.381,
+   "null_c5": -0.0088,
+   "verdict": "最適域",
+   "sec": 126
+  },
+  {
+   "diff_hat": -0.0143,
+   "optimism": -0.0078,
+   "point_corr": -0.0065,
+   "band95": [
+    -0.0344,
+    0.0036
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "ヤクルト",
+   "p": 0.762,
+   "null_c5": -0.0051,
+   "verdict": "最適域",
+   "sec": 136
+  }
+ ]
+}
