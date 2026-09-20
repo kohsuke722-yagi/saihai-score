@@ -1,0 +1,48 @@
+{
+ "mmdd": "0920",
+ "gid": "d-c-23",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0147,
+   "optimism": -0.005,
+   "point_corr": -0.0097,
+   "band95": [
+    -0.032,
+    0.0029
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "広島",
+   "p": 0.805,
+   "null_c5": -0.0045,
+   "verdict": "最適域",
+   "sec": 513
+  },
+  {
+   "diff_hat": -0.0066,
+   "optimism": -0.0082,
+   "point_corr": 0.0016,
+   "band95": [
+    -0.0246,
+    0.0063
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "中日",
+   "p": 0.951,
+   "null_c5": -0.0056,
+   "verdict": "最適域",
+   "sec": 512
+  }
+ ]
+}
