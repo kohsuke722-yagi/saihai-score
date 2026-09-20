@@ -1,0 +1,48 @@
+{
+ "mmdd": "0920",
+ "gid": "f-b-23",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0187,
+   "optimism": -0.0038,
+   "point_corr": -0.015,
+   "band95": [
+    -0.0303,
+    -0.006
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "オリックス",
+   "p": 0.095,
+   "null_c5": -0.0051,
+   "verdict": "最適域",
+   "sec": 74
+  },
+  {
+   "diff_hat": -0.0169,
+   "optimism": -0.0054,
+   "point_corr": -0.0115,
+   "band95": [
+    -0.0373,
+    -0.0031
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "日本ハム",
+   "p": 0.19,
+   "null_c5": -0.0044,
+   "verdict": "最適域",
+   "sec": 61
+  }
+ ]
+}
