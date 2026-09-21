@@ -1,0 +1,48 @@
+{
+ "mmdd": "0921",
+ "gid": "f-b-24",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0166,
+   "optimism": -0.0043,
+   "point_corr": -0.0123,
+   "band95": [
+    -0.0309,
+    -0.0052
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "オリックス",
+   "p": 0.024,
+   "null_c5": -0.0038,
+   "verdict": "有意な見逃し",
+   "sec": 353
+  },
+  {
+   "diff_hat": -0.0141,
+   "optimism": -0.0074,
+   "point_corr": -0.0067,
+   "band95": [
+    -0.025,
+    -0.0046
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "日本ハム",
+   "p": 0.195,
+   "null_c5": -0.007,
+   "verdict": "最適域",
+   "sec": 315
+  }
+ ]
+}
