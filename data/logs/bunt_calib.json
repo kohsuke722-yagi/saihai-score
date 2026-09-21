@@ -1,27 +1,27 @@
 {
  "stats": {
   "pitcher": {
-   "att": 235,
-   "succ": 182,
-   "rate": 0.7745
+   "att": 237,
+   "succ": 184,
+   "rate": 0.7764
   },
   "fielder": {
-   "att": 764,
-   "succ": 630,
-   "rate": 0.8246
+   "att": 765,
+   "succ": 631,
+   "rate": 0.8248
   }
  },
  "bunt_p": {
   "pitcher": {
-   "succ": 0.7512,
+   "succ": 0.7531,
    "hit": 0.03,
-   "leadout": 0.1225,
-   "fail": 0.0963
+   "leadout": 0.1215,
+   "fail": 0.0954
   },
   "fielder": {
-   "succ": 0.7834,
+   "succ": 0.7836,
    "hit": 0.05,
-   "leadout": 0.1111,
+   "leadout": 0.1109,
    "fail": 0.0555
   }
  },
@@ -150,11 +150,6 @@
    "succ": 6,
    "kind": "fielder"
   },
-  "c:中村奨成": {
-   "att": 7,
-   "succ": 7,
-   "kind": "fielder"
-  },
   "g:石塚裕惺": {
    "att": 2,
    "succ": 2,
@@ -163,6 +158,11 @@
   "s:武岡龍世": {
    "att": 1,
    "succ": 1,
+   "kind": "fielder"
+  },
+  "c:中村奨成": {
+   "att": 7,
+   "succ": 7,
    "kind": "fielder"
   },
   "db:京田陽太": {
@@ -195,14 +195,14 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "c:二俣翔一": {
-   "att": 2,
-   "succ": 2,
-   "kind": "fielder"
-  },
   "db:石上泰輝": {
    "att": 4,
    "succ": 4,
+   "kind": "fielder"
+  },
+  "c:二俣翔一": {
+   "att": 2,
+   "succ": 2,
    "kind": "fielder"
   },
   "s:中村悠平": {
@@ -346,8 +346,8 @@
    "kind": "pitcher"
   },
   "db:平良拳太郎": {
-   "att": 8,
-   "succ": 8,
+   "att": 9,
+   "succ": 9,
    "kind": "pitcher"
   },
   "t:椎葉剛": {
@@ -475,6 +475,11 @@
    "succ": 3,
    "kind": "fielder"
   },
+  "d:髙橋宏斗": {
+   "att": 8,
+   "succ": 6,
+   "kind": "pitcher"
+  },
   "d:加藤匠馬": {
    "att": 4,
    "succ": 3,
@@ -505,11 +510,6 @@
    "succ": 5,
    "kind": "fielder"
   },
-  "d:髙橋宏斗": {
-   "att": 7,
-   "succ": 5,
-   "kind": "pitcher"
-  },
   "g:松本剛": {
    "att": 19,
    "succ": 13,
@@ -525,12 +525,12 @@
    "succ": 4,
    "kind": "fielder"
   },
-  "db:蝦名達夫": {
+  "s:並木秀尊": {
    "att": 3,
    "succ": 2,
    "kind": "fielder"
   },
-  "s:並木秀尊": {
+  "db:蝦名達夫": {
    "att": 3,
    "succ": 2,
    "kind": "fielder"
@@ -850,14 +850,14 @@
    "succ": 3,
    "kind": "fielder"
   },
-  "m:和田康士朗": {
-   "att": 2,
-   "succ": 2,
-   "kind": "fielder"
-  },
   "f:山縣秀": {
    "att": 5,
    "succ": 5,
+   "kind": "fielder"
+  },
+  "m:和田康士朗": {
+   "att": 2,
+   "succ": 2,
    "kind": "fielder"
   },
   "h:今宮健太": {
@@ -885,11 +885,6 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "f:大塚瑠晏": {
-   "att": 1,
-   "succ": 1,
-   "kind": "fielder"
-  },
   "e:小深田大翔": {
    "att": 5,
    "succ": 5,
@@ -898,6 +893,11 @@
   "e:堀内謙伍": {
    "att": 3,
    "succ": 3,
+   "kind": "fielder"
+  },
+  "f:大塚瑠晏": {
+   "att": 2,
+   "succ": 2,
    "kind": "fielder"
   },
   "e:繁永晟": {
