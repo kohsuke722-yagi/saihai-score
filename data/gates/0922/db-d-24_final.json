@@ -1,0 +1,48 @@
+{
+ "mmdd": "0922",
+ "gid": "db-d-24",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0034,
+   "optimism": -0.01,
+   "point_corr": 0.0066,
+   "band95": [
+    -0.0206,
+    0.0082
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "中日",
+   "p": 1.0,
+   "null_c5": -0.0077,
+   "verdict": "最適域",
+   "sec": 486
+  },
+  {
+   "diff_hat": -0.0185,
+   "optimism": -0.0066,
+   "point_corr": -0.0119,
+   "band95": [
+    -0.0443,
+    0.0032
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "DeNA",
+   "p": 0.805,
+   "null_c5": -0.0057,
+   "verdict": "最適域",
+   "sec": 489
+  }
+ ]
+}
