@@ -65,11 +65,6 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "g:佐々木俊輔": {
-   "att": 4,
-   "succ": 4,
-   "kind": "fielder"
-  },
   "d:木下拓哉": {
    "att": 1,
    "succ": 1,
@@ -78,6 +73,11 @@
   "g:泉口友汰": {
    "att": 3,
    "succ": 3,
+   "kind": "fielder"
+  },
+  "g:佐々木俊輔": {
+   "att": 4,
+   "succ": 4,
    "kind": "fielder"
   },
   "c:小園海斗": {
@@ -130,11 +130,6 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "g:増田陸": {
-   "att": 1,
-   "succ": 1,
-   "kind": "fielder"
-  },
   "s:茂木栄五郎": {
    "att": 1,
    "succ": 1,
@@ -145,14 +140,19 @@
    "succ": 4,
    "kind": "fielder"
   },
-  "db:林琢真": {
-   "att": 6,
-   "succ": 6,
+  "g:増田陸": {
+   "att": 1,
+   "succ": 1,
    "kind": "fielder"
   },
   "c:中村奨成": {
    "att": 7,
    "succ": 7,
+   "kind": "fielder"
+  },
+  "db:林琢真": {
+   "att": 6,
+   "succ": 6,
    "kind": "fielder"
   },
   "s:武岡龍世": {
@@ -230,11 +230,6 @@
    "succ": 2,
    "kind": "fielder"
   },
-  "c:辰見鴻之介": {
-   "att": 2,
-   "succ": 2,
-   "kind": "fielder"
-  },
   "t:大竹耕太郎": {
    "att": 3,
    "succ": 3,
@@ -249,6 +244,11 @@
    "att": 3,
    "succ": 3,
    "kind": "pitcher"
+  },
+  "c:辰見鴻之介": {
+   "att": 2,
+   "succ": 2,
+   "kind": "fielder"
   },
   "d:尾田剛樹": {
    "att": 1,
@@ -835,11 +835,6 @@
    "succ": 6,
    "kind": "fielder"
   },
-  "f:細川凌平": {
-   "att": 6,
-   "succ": 6,
-   "kind": "fielder"
-  },
   "f:山縣秀": {
    "att": 5,
    "succ": 5,
@@ -850,14 +845,19 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "e:小郷裕哉": {
-   "att": 1,
-   "succ": 1,
+  "f:細川凌平": {
+   "att": 6,
+   "succ": 6,
    "kind": "fielder"
   },
   "f:上川畑大悟": {
    "att": 3,
    "succ": 3,
+   "kind": "fielder"
+  },
+  "e:小郷裕哉": {
+   "att": 1,
+   "succ": 1,
    "kind": "fielder"
   },
   "m:和田康士朗": {
@@ -905,14 +905,14 @@
    "succ": 3,
    "kind": "fielder"
   },
-  "f:大塚瑠晏": {
-   "att": 2,
-   "succ": 2,
-   "kind": "fielder"
-  },
   "m:松川虎生": {
    "att": 4,
    "succ": 4,
+   "kind": "fielder"
+  },
+  "f:大塚瑠晏": {
+   "att": 2,
+   "succ": 2,
    "kind": "fielder"
   },
   "e:鈴木大地": {
@@ -1060,14 +1060,14 @@
    "succ": 19,
    "kind": "fielder"
   },
-  "e:中島大輔": {
-   "att": 12,
-   "succ": 10,
-   "kind": "fielder"
-  },
   "b:来田涼斗": {
    "att": 6,
    "succ": 5,
+   "kind": "fielder"
+  },
+  "e:中島大輔": {
+   "att": 12,
+   "succ": 10,
    "kind": "fielder"
   },
   "e:渡邊佳明": {
