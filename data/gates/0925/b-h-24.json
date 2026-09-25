@@ -1,0 +1,48 @@
+{
+ "mmdd": "0925",
+ "gid": "b-h-24",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0075,
+   "optimism": -0.0022,
+   "point_corr": -0.0052,
+   "band95": [
+    -0.0154,
+    -0.0001
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "ソフトバンク",
+   "p": 0.286,
+   "null_c5": -0.0012,
+   "verdict": "最適域",
+   "sec": 155
+  },
+  {
+   "diff_hat": -0.0192,
+   "optimism": -0.0039,
+   "point_corr": -0.0153,
+   "band95": [
+    -0.032,
+    -0.0061
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "オリックス",
+   "p": 0.048,
+   "null_c5": -0.0014,
+   "verdict": "有意な見逃し",
+   "sec": 153
+  }
+ ]
+}
