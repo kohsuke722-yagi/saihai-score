@@ -1,0 +1,48 @@
+{
+ "mmdd": "0926",
+ "gid": "b-f-25",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0196,
+   "optimism": -0.007,
+   "point_corr": -0.0126,
+   "band95": [
+    -0.0322,
+    -0.0062
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "日本ハム",
+   "p": 0.143,
+   "null_c5": -0.0067,
+   "verdict": "最適域",
+   "sec": 164
+  },
+  {
+   "diff_hat": -0.021,
+   "optimism": -0.0031,
+   "point_corr": -0.0179,
+   "band95": [
+    -0.0341,
+    -0.0086
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "オリックス",
+   "p": 0.048,
+   "null_c5": -0.003,
+   "verdict": "有意な見逃し",
+   "sec": 146
+  }
+ ]
+}
