@@ -1,0 +1,48 @@
+{
+ "mmdd": "0926",
+ "gid": "l-m-23",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0162,
+   "optimism": -0.0047,
+   "point_corr": -0.0115,
+   "band95": [
+    -0.0299,
+    -0.0052
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "ロッテ",
+   "p": 0.073,
+   "null_c5": -0.0029,
+   "verdict": "最適域",
+   "sec": 485
+  },
+  {
+   "diff_hat": -0.0137,
+   "optimism": -0.0043,
+   "point_corr": -0.0094,
+   "band95": [
+    -0.0307,
+    0.0016
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "西武",
+   "p": 0.683,
+   "null_c5": -0.0061,
+   "verdict": "最適域",
+   "sec": 527
+  }
+ ]
+}
