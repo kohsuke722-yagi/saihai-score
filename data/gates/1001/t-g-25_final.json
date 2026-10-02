@@ -1,0 +1,48 @@
+{
+ "mmdd": "1001",
+ "gid": "t-g-25",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0145,
+   "optimism": -0.0063,
+   "point_corr": -0.0082,
+   "band95": [
+    -0.0358,
+    -0.0021
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "巨人",
+   "p": 0.366,
+   "null_c5": -0.0076,
+   "verdict": "最適域",
+   "sec": 463
+  },
+  {
+   "diff_hat": -0.007,
+   "optimism": -0.0074,
+   "point_corr": 0.0004,
+   "band95": [
+    -0.028,
+    0.0056
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "阪神",
+   "p": 0.976,
+   "null_c5": -0.0057,
+   "verdict": "最適域",
+   "sec": 439
+  }
+ ]
+}
