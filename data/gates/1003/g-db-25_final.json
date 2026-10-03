@@ -1,0 +1,48 @@
+{
+ "mmdd": "1003",
+ "gid": "g-db-25",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0273,
+   "optimism": -0.0093,
+   "point_corr": -0.018,
+   "band95": [
+    -0.0499,
+    -0.0039
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "DeNA",
+   "p": 0.268,
+   "null_c5": -0.008,
+   "verdict": "最適域",
+   "sec": 224
+  },
+  {
+   "diff_hat": -0.0093,
+   "optimism": -0.0053,
+   "point_corr": -0.0041,
+   "band95": [
+    -0.0213,
+    -0.0002
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "巨人",
+   "p": 0.512,
+   "null_c5": -0.0066,
+   "verdict": "最適域",
+   "sec": 218
+  }
+ ]
+}
