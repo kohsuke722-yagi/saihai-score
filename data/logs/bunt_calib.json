@@ -1,28 +1,28 @@
 {
  "stats": {
   "pitcher": {
-   "att": 250,
-   "succ": 193,
-   "rate": 0.772
+   "att": 254,
+   "succ": 195,
+   "rate": 0.7677
   },
   "fielder": {
-   "att": 798,
-   "succ": 658,
-   "rate": 0.8246
+   "att": 804,
+   "succ": 664,
+   "rate": 0.8259
   }
  },
  "bunt_p": {
   "pitcher": {
-   "succ": 0.7488,
+   "succ": 0.7447,
    "hit": 0.03,
-   "leadout": 0.1238,
-   "fail": 0.0973
+   "leadout": 0.1262,
+   "fail": 0.0991
   },
   "fielder": {
-   "succ": 0.7833,
+   "succ": 0.7846,
    "hit": 0.05,
-   "leadout": 0.1111,
-   "fail": 0.0556
+   "leadout": 0.1103,
+   "fail": 0.0551
   }
  },
  "pi": {
@@ -80,14 +80,24 @@
    "succ": 2,
    "kind": "fielder"
   },
+  "d:阿部寿樹": {
+   "att": 1,
+   "succ": 1,
+   "kind": "fielder"
+  },
+  "c:中村奨成": {
+   "att": 7,
+   "succ": 7,
+   "kind": "fielder"
+  },
   "g:佐々木俊輔": {
    "att": 4,
    "succ": 4,
    "kind": "fielder"
   },
-  "d:阿部寿樹": {
-   "att": 1,
-   "succ": 1,
+  "s:長岡秀樹": {
+   "att": 3,
+   "succ": 3,
    "kind": "fielder"
   },
   "d:高橋周平": {
@@ -105,11 +115,6 @@
    "succ": 2,
    "kind": "fielder"
   },
-  "s:長岡秀樹": {
-   "att": 3,
-   "succ": 3,
-   "kind": "fielder"
-  },
   "c:佐々木泰": {
    "att": 1,
    "succ": 1,
@@ -120,16 +125,6 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "g:増田陸": {
-   "att": 2,
-   "succ": 2,
-   "kind": "fielder"
-  },
-  "c:中村奨成": {
-   "att": 7,
-   "succ": 7,
-   "kind": "fielder"
-  },
   "s:赤羽由紘": {
    "att": 4,
    "succ": 4,
@@ -138,6 +133,11 @@
   "g:吉川尚輝": {
    "att": 1,
    "succ": 1,
+   "kind": "fielder"
+  },
+  "g:増田陸": {
+   "att": 2,
+   "succ": 2,
    "kind": "fielder"
   },
   "s:茂木栄五郎": {
@@ -215,11 +215,6 @@
    "succ": 2,
    "kind": "fielder"
   },
-  "s:高梨裕稔": {
-   "att": 2,
-   "succ": 2,
-   "kind": "pitcher"
-  },
   "db:入江大生": {
    "att": 3,
    "succ": 3,
@@ -260,14 +255,14 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "g:則本昂大": {
-   "att": 2,
-   "succ": 2,
-   "kind": "pitcher"
-  },
   "g:山﨑伊織": {
    "att": 1,
    "succ": 1,
+   "kind": "pitcher"
+  },
+  "g:則本昂大": {
+   "att": 2,
+   "succ": 2,
    "kind": "pitcher"
   },
   "s:吉村貢司郎": {
@@ -421,13 +416,13 @@
    "kind": "fielder"
   },
   "t:元山飛優": {
-   "att": 11,
-   "succ": 9,
+   "att": 12,
+   "succ": 10,
    "kind": "fielder"
   },
   "c:勝田成": {
-   "att": 11,
-   "succ": 9,
+   "att": 12,
+   "succ": 10,
    "kind": "fielder"
   },
   "d:大野雄大": {
@@ -435,17 +430,22 @@
    "succ": 9,
    "kind": "pitcher"
   },
+  "d:石伊雄太": {
+   "att": 10,
+   "succ": 8,
+   "kind": "fielder"
+  },
   "g:岸田行倫": {
    "att": 5,
    "succ": 4,
    "kind": "fielder"
   },
-  "g:戸郷翔征": {
+  "c:森下暢仁": {
    "att": 5,
    "succ": 4,
    "kind": "pitcher"
   },
-  "c:森下暢仁": {
+  "g:戸郷翔征": {
    "att": 5,
    "succ": 4,
    "kind": "pitcher"
@@ -454,11 +454,6 @@
    "att": 5,
    "succ": 4,
    "kind": "pitcher"
-  },
-  "d:石伊雄太": {
-   "att": 9,
-   "succ": 7,
-   "kind": "fielder"
   },
   "c:大盛穂": {
    "att": 9,
@@ -473,6 +468,11 @@
   "t:坂本誠志郎": {
    "att": 13,
    "succ": 10,
+   "kind": "fielder"
+  },
+  "s:岩田幸宏": {
+   "att": 8,
+   "succ": 6,
    "kind": "fielder"
   },
   "g:増田大輝": {
@@ -490,11 +490,6 @@
    "succ": 3,
    "kind": "pitcher"
   },
-  "d:髙橋宏斗": {
-   "att": 8,
-   "succ": 6,
-   "kind": "pitcher"
-  },
   "d:加藤匠馬": {
    "att": 4,
    "succ": 3,
@@ -510,11 +505,6 @@
    "succ": 8,
    "kind": "fielder"
   },
-  "s:岩田幸宏": {
-   "att": 7,
-   "succ": 5,
-   "kind": "fielder"
-  },
   "t:髙寺望夢": {
    "att": 7,
    "succ": 5,
@@ -524,6 +514,11 @@
    "att": 20,
    "succ": 14,
    "kind": "fielder"
+  },
+  "d:髙橋宏斗": {
+   "att": 10,
+   "succ": 7,
+   "kind": "pitcher"
   },
   "db:勝又温史": {
    "att": 3,
@@ -554,6 +549,11 @@
    "att": 3,
    "succ": 2,
    "kind": "fielder"
+  },
+  "s:高梨裕稔": {
+   "att": 3,
+   "succ": 2,
+   "kind": "pitcher"
   },
   "s:増居翔太": {
    "att": 3,
@@ -595,6 +595,11 @@
    "succ": 5,
    "kind": "pitcher"
   },
+  "g:井上温大": {
+   "att": 9,
+   "succ": 5,
+   "kind": "pitcher"
+  },
   "db:宮下朝陽": {
    "att": 2,
    "succ": 1,
@@ -613,6 +618,11 @@
   "g:笹原操希": {
    "att": 2,
    "succ": 1,
+   "kind": "fielder"
+  },
+  "c:石原貴規": {
+   "att": 6,
+   "succ": 3,
    "kind": "fielder"
   },
   "d:マラー": {
@@ -650,11 +660,6 @@
    "succ": 1,
    "kind": "pitcher"
   },
-  "g:井上温大": {
-   "att": 8,
-   "succ": 4,
-   "kind": "pitcher"
-  },
   "g:ウィットリー": {
    "att": 4,
    "succ": 2,
@@ -671,11 +676,6 @@
    "kind": "pitcher"
   },
   "c:名原典彦": {
-   "att": 5,
-   "succ": 2,
-   "kind": "fielder"
-  },
-  "c:石原貴規": {
    "att": 5,
    "succ": 2,
    "kind": "fielder"
@@ -765,14 +765,14 @@
    "succ": 8,
    "kind": "fielder"
   },
-  "h:柳町達": {
-   "att": 1,
-   "succ": 1,
-   "kind": "fielder"
-  },
   "e:村林一輝": {
    "att": 4,
    "succ": 4,
+   "kind": "fielder"
+  },
+  "h:柳町達": {
+   "att": 1,
+   "succ": 1,
    "kind": "fielder"
   },
   "b:紅林弘太郎": {
@@ -820,6 +820,11 @@
    "succ": 2,
    "kind": "fielder"
   },
+  "h:今宮健太": {
+   "att": 3,
+   "succ": 3,
+   "kind": "fielder"
+  },
   "e:小郷裕哉": {
    "att": 1,
    "succ": 1,
@@ -830,19 +835,14 @@
    "succ": 5,
    "kind": "fielder"
   },
-  "m:佐藤都志也": {
-   "att": 1,
-   "succ": 1,
-   "kind": "fielder"
-  },
   "b:渡部遼人": {
    "att": 9,
    "succ": 9,
    "kind": "fielder"
   },
-  "h:今宮健太": {
-   "att": 3,
-   "succ": 3,
+  "m:佐藤都志也": {
+   "att": 1,
+   "succ": 1,
    "kind": "fielder"
   },
   "l:西川愛也": {
@@ -955,35 +955,15 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "b:横山聖哉": {
-   "att": 1,
-   "succ": 1,
-   "kind": "fielder"
-  },
   "h:川村友斗": {
    "att": 1,
    "succ": 1,
    "kind": "fielder"
   },
-  "h:前田悠伍": {
-   "att": 1,
-   "succ": 1,
-   "kind": "pitcher"
-  },
-  "h:松本晴": {
-   "att": 1,
-   "succ": 1,
-   "kind": "pitcher"
-  },
-  "e:小森航大郎": {
+  "b:横山聖哉": {
    "att": 1,
    "succ": 1,
    "kind": "fielder"
-  },
-  "e:荘司康誠": {
-   "att": 1,
-   "succ": 1,
-   "kind": "pitcher"
   },
   "b:九里亜蓮": {
    "att": 1,
@@ -1030,19 +1010,39 @@
    "succ": 1,
    "kind": "pitcher"
   },
+  "h:前田悠伍": {
+   "att": 1,
+   "succ": 1,
+   "kind": "pitcher"
+  },
+  "h:松本晴": {
+   "att": 1,
+   "succ": 1,
+   "kind": "pitcher"
+  },
+  "e:小森航大郎": {
+   "att": 1,
+   "succ": 1,
+   "kind": "fielder"
+  },
+  "e:荘司康誠": {
+   "att": 1,
+   "succ": 1,
+   "kind": "pitcher"
+  },
   "f:水野達稀": {
    "att": 17,
    "succ": 16,
    "kind": "fielder"
   },
-  "h:周東佑京": {
-   "att": 14,
-   "succ": 13,
-   "kind": "fielder"
-  },
   "l:滝澤夏央": {
    "att": 28,
    "succ": 26,
+   "kind": "fielder"
+  },
+  "h:周東佑京": {
+   "att": 14,
+   "succ": 13,
    "kind": "fielder"
   },
   "m:小川龍成": {
@@ -1066,8 +1066,8 @@
    "kind": "fielder"
   },
   "e:中島大輔": {
-   "att": 12,
-   "succ": 10,
+   "att": 13,
+   "succ": 11,
    "kind": "fielder"
   },
   "b:来田涼斗": {
