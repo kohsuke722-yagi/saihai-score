@@ -6,9 +6,9 @@
    "rate": 0.7677
   },
   "fielder": {
-   "att": 804,
-   "succ": 664,
-   "rate": 0.8259
+   "att": 807,
+   "succ": 667,
+   "rate": 0.8265
   }
  },
  "bunt_p": {
@@ -19,10 +19,10 @@
    "fail": 0.0991
   },
   "fielder": {
-   "succ": 0.7846,
+   "succ": 0.7852,
    "hit": 0.05,
-   "leadout": 0.1103,
-   "fail": 0.0551
+   "leadout": 0.1099,
+   "fail": 0.0549
   }
  },
  "pi": {
@@ -765,12 +765,17 @@
    "succ": 8,
    "kind": "fielder"
   },
+  "h:柳町達": {
+   "att": 1,
+   "succ": 1,
+   "kind": "fielder"
+  },
   "e:村林一輝": {
    "att": 4,
    "succ": 4,
    "kind": "fielder"
   },
-  "h:柳町達": {
+  "e:辰己涼介": {
    "att": 1,
    "succ": 1,
    "kind": "fielder"
@@ -778,11 +783,6 @@
   "b:紅林弘太郎": {
    "att": 5,
    "succ": 5,
-   "kind": "fielder"
-  },
-  "e:辰己涼介": {
-   "att": 1,
-   "succ": 1,
    "kind": "fielder"
   },
   "l:渡部聖弥": {
@@ -805,9 +805,9 @@
    "succ": 11,
    "kind": "fielder"
   },
-  "l:石井一成": {
-   "att": 1,
-   "succ": 1,
+  "h:今宮健太": {
+   "att": 3,
+   "succ": 3,
    "kind": "fielder"
   },
   "f:清宮幸太郎": {
@@ -815,14 +815,9 @@
    "succ": 1,
    "kind": "fielder"
   },
-  "h:廣瀨隆太": {
-   "att": 2,
-   "succ": 2,
-   "kind": "fielder"
-  },
-  "h:今宮健太": {
-   "att": 3,
-   "succ": 3,
+  "l:石井一成": {
+   "att": 1,
+   "succ": 1,
    "kind": "fielder"
   },
   "e:小郷裕哉": {
@@ -835,6 +830,16 @@
    "succ": 5,
    "kind": "fielder"
   },
+  "l:西川愛也": {
+   "att": 7,
+   "succ": 7,
+   "kind": "fielder"
+  },
+  "h:廣瀨隆太": {
+   "att": 2,
+   "succ": 2,
+   "kind": "fielder"
+  },
   "b:渡部遼人": {
    "att": 9,
    "succ": 9,
@@ -843,11 +848,6 @@
   "m:佐藤都志也": {
    "att": 1,
    "succ": 1,
-   "kind": "fielder"
-  },
-  "l:西川愛也": {
-   "att": 6,
-   "succ": 6,
    "kind": "fielder"
   },
   "e:石原彪": {
@@ -1046,8 +1046,8 @@
    "kind": "fielder"
   },
   "m:小川龍成": {
-   "att": 13,
-   "succ": 12,
+   "att": 14,
+   "succ": 13,
    "kind": "fielder"
   },
   "h:海野隆司": {
@@ -1161,8 +1161,8 @@
    "kind": "fielder"
   },
   "e:太田光": {
-   "att": 11,
-   "succ": 6,
+   "att": 12,
+   "succ": 7,
    "kind": "fielder"
   },
   "l:小島大河": {
