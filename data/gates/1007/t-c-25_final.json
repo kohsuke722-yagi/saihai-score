@@ -1,0 +1,48 @@
+{
+ "mmdd": "1007",
+ "gid": "t-c-25",
+ "mode": "nightly",
+ "settings": {
+  "B": 400,
+  "K": 200,
+  "M_null": 40,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0149,
+   "optimism": -0.0047,
+   "point_corr": -0.0102,
+   "band95": [
+    -0.0274,
+    -0.0015
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "広島",
+   "p": 0.463,
+   "null_c5": -0.0068,
+   "verdict": "最適域",
+   "sec": 332
+  },
+  {
+   "diff_hat": -0.0292,
+   "optimism": -0.0033,
+   "point_corr": -0.0259,
+   "band95": [
+    -0.048,
+    -0.0101
+   ],
+   "istar": 0,
+   "B": 400,
+   "team": "阪神",
+   "p": 0.024,
+   "null_c5": -0.0055,
+   "verdict": "有意な見逃し",
+   "sec": 323
+  }
+ ]
+}
