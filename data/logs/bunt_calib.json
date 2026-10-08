@@ -65,6 +65,11 @@
    "succ": 1,
    "kind": "fielder"
   },
+  "s:松本直樹": {
+   "att": 1,
+   "succ": 1,
+   "kind": "fielder"
+  },
   "g:泉口友汰": {
    "att": 3,
    "succ": 3,
@@ -110,19 +115,14 @@
    "succ": 2,
    "kind": "pitcher"
   },
-  "s:長岡秀樹": {
-   "att": 3,
-   "succ": 3,
-   "kind": "fielder"
-  },
   "db:松尾汐恩": {
    "att": 2,
    "succ": 2,
    "kind": "fielder"
   },
-  "s:松本直樹": {
-   "att": 1,
-   "succ": 1,
+  "s:長岡秀樹": {
+   "att": 3,
+   "succ": 3,
    "kind": "fielder"
   },
   "s:赤羽由紘": {
@@ -145,14 +145,14 @@
    "succ": 2,
    "kind": "fielder"
   },
-  "s:茂木栄五郎": {
-   "att": 1,
-   "succ": 1,
-   "kind": "fielder"
-  },
   "d:岡林勇希": {
    "att": 4,
    "succ": 4,
+   "kind": "fielder"
+  },
+  "s:茂木栄五郎": {
+   "att": 1,
+   "succ": 1,
    "kind": "fielder"
   },
   "s:武岡龍世": {
@@ -160,14 +160,19 @@
    "succ": 1,
    "kind": "fielder"
   },
+  "t:伏見寅威": {
+   "att": 4,
+   "succ": 4,
+   "kind": "fielder"
+  },
   "db:京田陽太": {
    "att": 2,
    "succ": 2,
    "kind": "fielder"
   },
-  "t:伏見寅威": {
-   "att": 4,
-   "succ": 4,
+  "t:梅野隆太郎": {
+   "att": 2,
+   "succ": 2,
    "kind": "fielder"
   },
   "g:石塚裕惺": {
@@ -178,11 +183,6 @@
   "db:林琢真": {
    "att": 6,
    "succ": 6,
-   "kind": "fielder"
-  },
-  "t:梅野隆太郎": {
-   "att": 2,
-   "succ": 2,
    "kind": "fielder"
   },
   "c:床田寛樹": {
@@ -220,6 +220,11 @@
    "succ": 3,
    "kind": "pitcher"
   },
+  "s:石井巧": {
+   "att": 1,
+   "succ": 1,
+   "kind": "fielder"
+  },
   "s:伊藤琉偉": {
    "att": 3,
    "succ": 3,
@@ -229,11 +234,6 @@
    "att": 4,
    "succ": 4,
    "kind": "pitcher"
-  },
-  "s:石井巧": {
-   "att": 1,
-   "succ": 1,
-   "kind": "fielder"
   },
   "c:辰見鴻之介": {
    "att": 2,
