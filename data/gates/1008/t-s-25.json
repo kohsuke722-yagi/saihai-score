@@ -1,0 +1,48 @@
+{
+ "mmdd": "1008",
+ "gid": "t-s-25",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.0131,
+   "optimism": -0.0058,
+   "point_corr": -0.0073,
+   "band95": [
+    -0.0298,
+    -0.0002
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "ヤクルト",
+   "p": 0.381,
+   "null_c5": -0.0091,
+   "verdict": "最適域",
+   "sec": 54
+  },
+  {
+   "diff_hat": -0.0297,
+   "optimism": -0.0053,
+   "point_corr": -0.0244,
+   "band95": [
+    -0.0533,
+    -0.0148
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "阪神",
+   "p": 0.095,
+   "null_c5": -0.0062,
+   "verdict": "判定不能",
+   "sec": 63
+  }
+ ]
+}
