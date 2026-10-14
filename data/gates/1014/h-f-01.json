@@ -1,0 +1,48 @@
+{
+ "mmdd": "1014",
+ "gid": "h-f-01",
+ "mode": "pregame",
+ "settings": {
+  "B": 200,
+  "K": 200,
+  "M_null": 20,
+  "delta": 0.005,
+  "opt_zone": 0.02,
+  "dscale": 1.0,
+  "lam_bat": 0.65
+ },
+ "teams": [
+  {
+   "diff_hat": -0.052,
+   "optimism": -0.0045,
+   "point_corr": -0.0475,
+   "band95": [
+    -0.0871,
+    -0.0241
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "日本ハム",
+   "p": 0.048,
+   "null_c5": -0.0123,
+   "verdict": "有意な見逃し",
+   "sec": 60
+  },
+  {
+   "diff_hat": -0.0133,
+   "optimism": -0.0056,
+   "point_corr": -0.0076,
+   "band95": [
+    -0.0307,
+    0.0032
+   ],
+   "istar": 0,
+   "B": 200,
+   "team": "ソフトバンク",
+   "p": 0.857,
+   "null_c5": -0.0053,
+   "verdict": "最適域",
+   "sec": 78
+  }
+ ]
+}
